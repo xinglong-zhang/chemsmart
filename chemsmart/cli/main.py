@@ -12,6 +12,7 @@ from chemsmart import __version__
 from chemsmart.utils.cli import MyGroup
 
 from .config import config
+from .plugins import COMMANDS, add_commands
 from .run import run
 from .sub import sub
 from .update import update
@@ -69,6 +70,7 @@ entry_point.add_command(run)
 entry_point.add_command(sub)
 entry_point.add_command(config)
 entry_point.add_command(update)
+add_commands(COMMANDS, entry_point, ())
 
 
 def main():  # pragma: no cover

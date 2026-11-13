@@ -23,6 +23,7 @@ Public API:
 import ast
 import copy
 import logging
+import os
 import pprint
 import typing as t
 
@@ -63,13 +64,20 @@ def _add_subcommand_info_to_ctx(ctx):
     nargs = {param.name: param.nargs for param in ctx.command.params}
     is_multiple = {param.name: param.multiple for param in ctx.command.params}
     types = {param.name: param.type for param in ctx.command.params}
-    is_flag = {param.name: param.is_flag for param in ctx.command.params}
+    is_flag = {
+        param.name: getattr(param, "is_flag", False)
+        for param in ctx.command.params
+    }
     secondary_opts = {
-        param.name: param.secondary_opts for param in ctx.command.params
+        param.name: getattr(param, "secondary_opts", [])
+        for param in ctx.command.params
     }
 
     subcommand["kwargs"] = {}
     for param, value in ctx.params.items():
+        if param not in nargs:
+            # Callbacks can inject non-CLI values into ctx.params.
+            continue
         subcommand["kwargs"][param] = {}
         subcommand["kwargs"][param]["value"] = value
         subcommand["kwargs"][param]["nargs"] = nargs[param]
@@ -81,8 +89,13 @@ def _add_subcommand_info_to_ctx(ctx):
     parent = ctx.parent.info_name if ctx.parent is not None else None
 
     subcommand["parent"] = parent
+    subcommand["context_id"] = id(ctx)
+    subcommand["parent_context_id"] = (
+        id(ctx.parent) if ctx.parent is not None else None
+    )
 
     ctx.obj["subcommand"] += [subcommand]
+    return subcommand
 
 
 def get_selected_server(ctx):
@@ -253,7 +266,7 @@ class CtxObjArguments:
                 raise ValueError(
                     f"Specified entry point: {self.entry_point} could not be found"
                 )
-            assert len(subcommand) == 1
+            # The outer command is recorded before any same-named child.
             return subcommand[0]
 
         for subcommand in self._subcommands:
@@ -275,6 +288,8 @@ class CtxObjArguments:
         Returns:
             list[str]: Command line arguments for this command.
         """
+        if "parameters" in command:
+            return self._reconstruct_plugin_command(command)
         subcommand_args = command["kwargs"]
         subcommand_name = command["name"]
         logger.debug(f"Subcommand name {subcommand_name}")
@@ -312,7 +327,79 @@ class CtxObjArguments:
                 else:
                     command_line_string += [self._value(v)]
         logger.debug(f"Command line string: {command_line_string}")
-        return command_line_string
+        return [token for token in command_line_string if token != ""]
+
+    def _reconstruct_plugin_command(self, command):
+        """Use Click's actual option spellings and positional arguments."""
+        options = []
+        arguments = []
+        values = command["raw_values"]
+        emitted = set()
+        for param in command["parameters"]:
+            if param.name not in values or param.name in emitted:
+                continue
+            value = values[param.name]
+            if value is None or value == ():
+                continue
+            emitted.add(param.name)
+            if isinstance(param, click.Argument):
+                items = (value,) if param.nargs == 1 else value
+                arguments.extend(
+                    self._plugin_value(param, item) for item in items
+                )
+                continue
+            spelling = next(
+                (opt for opt in param.opts if opt.startswith("--")),
+                param.opts[0],
+            )
+            if param.count:
+                options.extend([spelling] * value)
+            elif param.is_flag:
+                chunks = value if param.multiple else (value,)
+                flags = [
+                    flag
+                    for flag in command["parameters"]
+                    if flag.name == param.name
+                ]
+                for chunk in chunks:
+                    for flag in flags:
+                        if flag.is_bool_flag and flag.secondary_opts:
+                            options.append(
+                                flag.opts[0]
+                                if chunk
+                                else flag.secondary_opts[0]
+                            )
+                            break
+                        if chunk == flag.flag_value:
+                            options.append(flag.opts[0])
+                            break
+            else:
+                chunks = value if param.multiple else (value,)
+                for chunk in chunks:
+                    options.append(spelling)
+                    items = (chunk,) if param.nargs == 1 else chunk
+                    options.extend(
+                        self._plugin_value(param, item) for item in items
+                    )
+        if any(value.startswith("-") for value in arguments):
+            arguments.insert(0, "--")
+        return [command["name"], *options, *arguments]
+
+    @staticmethod
+    def _plugin_value(param, value):
+        """Serialize Click input, keeping file paths valid on compute nodes."""
+        if isinstance(param.type, click.DateTime) and hasattr(
+            value, "strftime"
+        ):
+            return value.strftime(param.type.formats[0])
+        if isinstance(param.type, click.File):
+            value = getattr(value, "name", value)
+            return "-" if value == "-" else os.path.abspath(value)
+        if isinstance(param.type, click.Path) and param.type.resolve_path:
+            if value == "-" and param.type.allow_dash:
+                return value
+            return os.path.realpath(value)
+        return str(value)
 
     def _reconstruct_family(self, parent):
         """
@@ -349,6 +436,12 @@ class CtxObjArguments:
         Returns:
             list[dict]: List of child command dictionaries.
         """
+        if "context_id" in parent:
+            return [
+                child
+                for child in self._subcommands
+                if child.get("parent_context_id") == parent["context_id"]
+            ]
         return [
             subcommand
             for subcommand in self._subcommands
@@ -368,7 +461,7 @@ class CtxObjArguments:
         parent = self._entry_point()
         command_line = self._reconstruct_family(parent)
         # logger.info(f'Cmd: {command_line}')
-        return [i for i in command_line if len(i) != 0]
+        return command_line
 
 
 def get_setting_from_jobtype_for_gaussian(

@@ -10,7 +10,7 @@ from shutil import rmtree
 from typing import Callable, Optional, Sequence
 
 from chemsmart.jobs.job import Job
-from chemsmart.settings.executable import Executable
+from chemsmart.settings.executable import executable_class_for_program
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -23,13 +23,7 @@ logger = logging.getLogger(__name__)
 
 def _executable_class_for_program(program):
     """Return Executable subclass for a runner PROGRAM name, if any."""
-    if not program or program is NotImplemented:
-        return None
-    key = str(program).upper()
-    for exe_cls in Executable.subclasses():
-        if exe_cls.PROGRAM and str(exe_cls.PROGRAM).upper() == key:
-            return exe_cls
-    return None
+    return executable_class_for_program(program)
 
 
 def _scratch_from_server_yaml(runner_cls, server):
