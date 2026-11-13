@@ -17,12 +17,16 @@ def executable_class_for_program(program):
     if not program or program is NotImplemented:
         return None
     matches = [
-        cls for cls in Executable.subclasses()
-        if cls.PROGRAM and cls.PROGRAM is not NotImplemented
+        cls
+        for cls in Executable.subclasses()
+        if cls.PROGRAM
+        and cls.PROGRAM is not NotImplemented
         and str(cls.PROGRAM).lower() == str(program).lower()
     ]
     if len(matches) > 1:
-        raise ValueError(f"Multiple executables registered for program {program}.")
+        raise ValueError(
+            f"Multiple executables registered for program {program}."
+        )
     return matches[0] if matches else None
 
 

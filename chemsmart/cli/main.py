@@ -12,10 +12,10 @@ from chemsmart import __version__
 from chemsmart.utils.cli import MyGroup
 
 from .config import config
+from .plugins import COMMANDS, add_commands
 from .run import run
 from .sub import sub
 from .update import update
-from .plugins import COMMANDS, add_commands
 
 
 @click.group(cls=MyGroup)
