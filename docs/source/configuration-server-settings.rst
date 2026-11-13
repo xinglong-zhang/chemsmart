@@ -1058,11 +1058,9 @@ default only. Example: with ``NCIPLOT.SCRATCH: False`` in YAML, an omitted CLI f
 Resolution table (CLI path)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-   :header-rows:
-      1
-
-   :widths:
-      20 25 20 35
+.. list-table::
+   :header-rows: 1
+   :widths: 20 25 20 35
 
    -  -  CLI
       -  YAML ``SCRATCH``
@@ -1099,9 +1097,8 @@ Resolution table (CLI path)
       -  ``True``
       -  scratch directory if path exists; else job folder (warning)
 
-When scratch mode resolves to ``True`` but no scratch path can be found, CHEMSMART logs a warning, sets
-``scratch=False``, and runs in the job folder. When a path is found but the directory does not exist, job setup raises
-``FileNotFoundError``.
+When scratch mode resolves to ``True`` but no usable scratch path is found (no path configured, or a path that is not an
+existing directory), CHEMSMART logs a warning, sets ``scratch=False``, and runs in the job folder.
 
 Scratch directory path
 ----------------------
@@ -1113,9 +1110,9 @@ When scratch mode is ``True``, the scratch directory path is resolved in this or
 #. ``SERVER.SCRATCH_DIR``
 #. User settings ``SCRATCH`` (from CHEMSMART user configuration)
 
-If scratch mode is enabled but no scratch path can be resolved, CHEMSMART disables scratch with a warning and runs in
-the job folder. If a path is resolved but that directory does not exist, job setup raises ``FileNotFoundError``.
-Configure a real scratch path (or pass ``--no-scratch``) before relying on scratch execution.
+If scratch mode is enabled but no scratch path can be resolved, or the resolved path is missing or not a directory,
+CHEMSMART disables scratch with a warning and runs in the job folder. Create the scratch directory when you need scratch
+execution, or pass ``--no-scratch`` to run in the job folder without that warning.
 
 ``chemsmart sub`` reconstructs CLI arguments for the worker ``chemsmart run`` script. When ``--scratch`` /
 ``--no-scratch`` are omitted at submit time, those flags are also omitted in the reconstructed command so the worker
@@ -1168,3 +1165,36 @@ After creating a custom server configuration file:
 #. Verify the generated submission script to ensure all paths and settings are correct
 
 #. Test with a small job first to validate the configuration works correctly on your system
+
+Updating Existing Server YAML Files
+===================================
+
+When CHEMSMART adds support for a new program section in its bundled server template, existing user YAML files can be
+updated with either of the following:
+
+.. code:: bash
+
+   chemsmart update configs
+   chemsmart update configs -s SLURM
+   chemsmart update configs -s SLURM -s PBS
+
+`chemsmart update configs` updates the server configuration files interactively; `chemsmart update configs -s SLURM`
+updates the server configuration file located at `~/.chemsmart/server/SLURM.yaml`; whereas `chemsmart update configs -s
+SLURM -s PBS` updates multiple server configuration files located at `~/.chemsmart/server/SLURM.yaml` and
+`~/.chemsmart/server/PBS.yaml`.
+
+The command compares each selected YAML file with the bundled ``server.yaml`` template and only adds missing top-level
+program configuration sections. It does not update fields under``SERVER``, does not recursively fill missing fields
+inside an existing program section, and does not overwrite existing program sections or existing ``EXEFOLDER`` values.
+Custom top-level fields are preserved.
+
+Use ``-s`` / ``--server`` to select an existing YAML file from ``~/.chemsmart/server/``; the value may be given with or
+without ``.yaml``. Repeat the option to select multiple files. Without ``-s``, all existing ``*.yaml`` files in the
+server directory are checked. The command does not create missing server YAML files.
+
+In an interactive terminal, the command prompts at most once for the ``EXEFOLDER`` of each missing program discovered
+across the selected files. Press Enter to keep the value from the bundled template. A supplied path is applied only to
+newly copied program sections in files that were missing that program; existing program sections and paths are never
+changed. Program names are discovered from the template rather than maintained in a fixed list.
+
+When standard input is not an interactive terminal, the command does not prompt and uses the bundled template values.

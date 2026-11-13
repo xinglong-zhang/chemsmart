@@ -1,10 +1,13 @@
-# Detect the operating system
-RAW_OS := $(shell uname -s 2>/dev/null || echo $(OS))
-
-ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(RAW_OS)),)
+# Detect Windows before invoking uname: cmd.exe cannot redirect to /dev/null.
+ifeq ($(OS),Windows_NT)
     OS_FAMILY := Windows
 else
-    OS_FAMILY := Unix
+    RAW_OS := $(shell uname -s 2>/dev/null)
+    ifneq ($(filter MINGW% MSYS% CYGWIN%,$(RAW_OS)),)
+        OS_FAMILY := Windows
+    else
+        OS_FAMILY := Unix
+    endif
 endif
 
 ifeq ($(OS_FAMILY),Windows)
@@ -224,6 +227,16 @@ test: lint coverage-clean ## Run tests and generate terminal, XML, and HTML cove
 		-l \
 		--tb=short \
 		tests/
+
+.PHONY: test-soap
+test-soap: coverage-clean ## Branch coverage for SOAP analysis.
+	$(ENV_PREFIX)pytest tests/test_soap.py \
+		--cov=chemsmart.analysis.soap \
+		--cov-branch \
+		--cov-report=term-missing \
+		--cov-report=xml:coverage-soap.xml \
+		--cov-fail-under=90 \
+		-v
 
 .PHONY: test-cov-io
 test-cov-io: coverage-clean ## Branch coverage for converter.py + structure.py (target ≥90% each).

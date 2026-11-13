@@ -92,6 +92,9 @@ What ``make configure`` does on Anaconda / Miniconda PowerShell:
 #. **Copies templates** — copies the bundled ``.chemsmart`` configuration templates to ``~\.chemsmart``
    (``%USERPROFILE%\.chemsmart``).
 
+#. **Updates project templates** — adds missing project directories and files from newer bundled templates without
+   overwriting existing or user-created files.
+
 #. **Updates PowerShell profiles** — writes a ``$env:PYTHONPATH`` entry and a ``Set-Alias -Name chemsmart -Value
    chemsmart.exe`` declaration to:
 

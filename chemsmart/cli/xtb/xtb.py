@@ -52,7 +52,10 @@ def click_xtb_settings_options(f):
             ["gfn0", "gfn1", "gfn2", "gfnff"], case_sensitive=False
         ),
         default=None,
-        help="GFN-xTB method version.",
+        help=(
+            "GFN-xTB method version. If not specified, defaults to the "
+            "xTB default (gfn2)."
+        ),
     )
     @click.option(
         "-r",
@@ -64,7 +67,10 @@ def click_xtb_settings_options(f):
     @click.option(
         "--grad/--no-grad",
         default=None,
-        help="Enable gradient output.",
+        help=(
+            "Enable gradient output (--grad). If not specified, defaults to "
+            "the xTB default (disable gradient output)."
+        ),
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -93,7 +99,10 @@ def click_xtb_optimization_level_option(f):
             case_sensitive=False,
         ),
         default=None,
-        help="xTB optimization convergence level.",
+        help=(
+            "xTB optimization convergence level. If not specified, defaults "
+            "to the xTB default (vtight)."
+        ),
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):

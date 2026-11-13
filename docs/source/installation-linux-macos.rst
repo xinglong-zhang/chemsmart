@@ -83,6 +83,9 @@ What ``make configure`` does on Linux and macOS:
 
 #. **Copies templates** — copies the bundled ``.chemsmart`` configuration templates to ``~/.chemsmart``.
 
+#. **Updates project templates** — adds missing project directories and files from newer bundled templates without
+   overwriting existing or user-created files.
+
 #. **Updates your shell rc file** — appends ``export PATH=...`` and ``export PYTHONPATH=...`` lines to ``~/.bashrc``
    (bash) or ``~/.zshrc`` (zsh) so that the ``chemsmart`` command is available in new terminal sessions.
 
@@ -102,7 +105,7 @@ What ``make configure`` does on Linux and macOS:
 
 #. **Automatically sources your shell config** — after writing the ``export`` lines, ``make configure`` sources every
    shell rc file that exists (``~/.bashrc``, ``~/.zshrc``, ``~/.profile``) so that ``chemsmart`` is active for the rest
-   of the current make session, regardless of which file chemsmart wrote to.
+   of the current make session, regardless of which file CHEMSMART wrote to.
 
 .. note::
 
@@ -135,5 +138,5 @@ or
 
 .. note::
 
-   If ``~/.bashrc`` (or ``~/.zshrc``) already contains a chemsmart section (i.e. ``make configure`` has been run
+   If ``~/.bashrc`` (or ``~/.zshrc``) already contains a CHEMSMART section (i.e. ``make configure`` has been run
    before), it will *not* be modified again to avoid duplicate entries.

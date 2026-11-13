@@ -109,6 +109,13 @@ computational chemistry software.
 
    thermochemistry-analysis
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Descriptors
+
+   soap-descriptors
+   sterimol-parameters
+
 ..
    .. toctree::
       :maxdepth: 2
@@ -152,6 +159,16 @@ computational chemistry software.
    scripts-overview
    scripts-data-management
    scripts-electronic-analysis
+
+.. toctree::
+   :maxdepth: 2
+   :caption: The Molecule Object
+
+   api-molecule-overview
+   api-molecule-creating
+   api-molecule-manipulation
+   api-molecule-properties
+   api-molecule-geometry
 
 .. toctree::
    :maxdepth: 2

@@ -78,7 +78,7 @@ class CRESTJobRunner(JobRunner):
         logger.debug(f"CREST error path: {self.job_errfile}")
 
     def _set_up_variables_in_scratch(self, job):
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = os.path.join(self.scratch_dir, job.execution_name)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)
@@ -227,7 +227,7 @@ class FakeCRESTJobRunner(CRESTJobRunner):
         return CRESTExecutable(executable_folder=None, local_run=True)
 
     def _set_up_variables_in_scratch(self, job):
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = os.path.join(self.scratch_dir, job.execution_name)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)

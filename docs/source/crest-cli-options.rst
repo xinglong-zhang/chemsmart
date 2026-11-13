@@ -54,20 +54,20 @@ Project and File Options
 
    -  -  ``--ri, --record-index``
       -  int
-      -  Select a record from a chemsmart database by its 1-based index
+      -  Select a record from a CHEMSMART database by its 1-based index
 
    -  -  ``--rid, --record-id``
       -  string
-      -  Select a record from a chemsmart database by its ID
+      -  Select a record from a CHEMSMART database by its ID
 
    -  -  ``--sid, --structure-id``
       -  string
-      -  Select a structure from a chemsmart database by its ID
+      -  Select a structure from a CHEMSMART database by its ID
 
 .. note::
 
    -  ``-p`` uses the project name without the ``.yaml`` extension.
-   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``, ``.log``, ``.inp``, ``.out``, or a chemsmart
+   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``, ``.log``, ``.inp``, ``.out``, or a CHEMSMART
       database ``.db`` file.
 
 Specifying Output Filenames
@@ -133,8 +133,9 @@ Molecular Properties Options
 
 .. note::
 
-   If the input lacks charge/multiplicity, specify them with ``-c`` and ``-m``. CHEMSMART passes charge as ``--chrg``
-   and unpaired electrons as ``--uhf`` (``multiplicity - 1``).
+   If the input lacks charge/multiplicity, specify them with ``-c`` and ``-m`` for charge and spin multiplicity.
+   CHEMSMART automatically converts the supplied charge and multiplicity into ``--chrg`` and unpaired electrons
+   ``--uhf`` (= multiplicity - 1), respectively, required by CREST.
 
 Examples:
 
@@ -247,6 +248,15 @@ Solvent options are specified at the CREST group level and apply to all job type
    CHEMSMART renders solvent flags only when **both** ``solvent_model`` and ``solvent_id`` are set. Specifying only one
    of them leaves the calculation in the gas phase.
 
+.. note::
+
+   CREST uses the xTB backend for implicit solvation. The list of parameterized solvents and which solvation models
+   support them is maintained in the `xTB documentation on parameterized solvents
+   <https://xtb-docs.readthedocs.io/en/latest/gbsa.html#parameterized-solvents>`_.
+
+   CHEMSMART does not verify model-specific compatibility at job-setup time. Please check the official xTB documentation
+   before choosing a ``solvent_model`` / ``solvent_id`` combination.
+
 Examples:
 
 .. code:: bash
@@ -260,7 +270,7 @@ Examples:
 Database Input
 ==============
 
-CREST jobs can take geometries from a chemsmart ``.db`` file using the selectors:
+CREST jobs can take geometries from a CHEMSMART ``.db`` file using the selectors:
 
 .. code:: bash
 

@@ -46,9 +46,7 @@ class XTBMainOut(XTBFileMixin):
         return False
 
     def _get_route(self):
-        """
-        Get parsed route information.
-        """
+        """Get program call from xTB main output file contents."""
         for line in self.contents:
             if "program call" in line:
                 route = line.split(":")[-1].strip()

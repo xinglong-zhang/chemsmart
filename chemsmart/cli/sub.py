@@ -112,6 +112,8 @@ def sub(
     # Store the jobrunner and other options in the context object
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
     ctx.obj["jobrunner"] = jobrunner
+    # Commands that calculate as they parse must return a job here instead
+    ctx.obj["submitting"] = True
 
 
 @sub.result_callback(replace=True)

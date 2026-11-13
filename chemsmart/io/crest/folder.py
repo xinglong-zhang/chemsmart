@@ -49,7 +49,7 @@ class CRESTFolder(BaseFolder):
         Returns:
             bool: True if this is a valid CREST calculation directory.
         """
-        if self._crest_out() is None:
+        if self.crest_out_filepath is None:
             return False
         for filename in self.CREST_DIRECTORY_MARKERS:
             filepath = os.path.join(self.folder, filename)
@@ -62,7 +62,8 @@ class CRESTFolder(BaseFolder):
         )
         return False
 
-    def _crest_out(self):
+    @property
+    def crest_out_filepath(self):
         """
         Return the path to the main CREST output file.
 
@@ -85,37 +86,44 @@ class CRESTFolder(BaseFolder):
             )
         return crest_out[0]
 
-    def _conformers_xyz(self):
+    @property
+    def conformers_xyz_filepath(self):
         """Return the path to the conformer ensemble file."""
         conformers_xyz = os.path.join(self.folder, "crest_conformers.xyz")
         return conformers_xyz if os.path.exists(conformers_xyz) else None
 
-    def _best_xyz(self):
+    @property
+    def best_xyz_filepath(self):
         """Return the path to the best (lowest energy) conformer file."""
         best_xyz = os.path.join(self.folder, "crest_best.xyz")
         return best_xyz if os.path.exists(best_xyz) else None
 
-    def _rotamers_xyz(self):
+    @property
+    def rotamers_xyz_filepath(self):
         """Return the path to the rotamer ensemble file."""
         rotamers_xyz = os.path.join(self.folder, "crest_rotamers.xyz")
         return rotamers_xyz if os.path.exists(rotamers_xyz) else None
 
-    def _energies(self):
+    @property
+    def energies_filepath(self):
         """Return the path to the energies file."""
         energies = os.path.join(self.folder, "crest.energies")
         return energies if os.path.exists(energies) else None
 
-    def _constraints_inp(self):
+    @property
+    def constraints_inp_filepath(self):
         """Return the path to the constraints input file."""
         constraints_inp = os.path.join(self.folder, "constraints.inp")
         return constraints_inp if os.path.exists(constraints_inp) else None
 
-    def _crestopt_log(self):
+    @property
+    def crestopt_log_filepath(self):
         """Return the path to optimization trajectory log file."""
         crestopt_log = os.path.join(self.folder, "crestopt.log")
         return crestopt_log if os.path.exists(crestopt_log) else None
 
-    def _coord(self):
+    @property
+    def coord_filepath(self):
         """Return the path to TURBOMOLE coord file."""
         coord = os.path.join(self.folder, "coord")
         return coord if os.path.exists(coord) else None

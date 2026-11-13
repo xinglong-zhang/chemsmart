@@ -38,6 +38,7 @@ THERMOCHEMISTRY_DEFAULT_KWARGS = {
     "energy_units": "hartree",
     "check_imaginary_frequencies": True,
 }
+DEFAULT_CUTOFF_ENTROPY_GRIMME = 100.0
 
 
 def build_thermochemistry_kwargs(
@@ -134,6 +135,17 @@ def click_grouper_common_options(f):
         help="Output file format for results. Default is xlsx.",
     )
     @click.option(
+        "-r",
+        "--representative",
+        type=click.Choice(["lowest", "center", "top3"], case_sensitive=False),
+        default="lowest",
+        show_default=True,
+        help="Representative selection strategy. 'lowest': lowest-energy structure in each group; "
+        "'center': most central structure based on the grouping distance matrix; "
+        "'top3': most central structure among the three lowest-energy candidates. "
+        "center/top3 require a MatrixGrouper.",
+    )
+    @click.option(
         "-E",
         "--energy-type",
         type=click.Choice(
@@ -160,11 +172,10 @@ def click_grouper_thermochemistry_options(f):
     @click.option(
         "-csg",
         "--cutoff-entropy-grimme",
-        default=100,
+        default=None,
         type=float,
-        show_default=True,
         help="For-Thermo-Correction: Cutoff frequency for entropy in wavenumbers, using Grimme's "
-        "quasi-RRHO method (Default to 100).",
+        "quasi-RRHO method (Default to 100, unless -cst is given).",
     )
     @click.option(
         "-cst",
@@ -261,6 +272,7 @@ def grouper(
     threshold,
     num_groups,
     matrix_format,
+    representative,
     directory,
     filetype,
     program,
@@ -316,8 +328,13 @@ def grouper(
     ctx.obj["threshold"] = threshold
     ctx.obj["num_groups"] = num_groups
     ctx.obj["matrix_format"] = matrix_format
+    ctx.obj["representative"] = representative
     ctx.obj["conformer_ids"] = None  # Will be set only in directory mode
     ctx.obj["energy_type"] = energy_type
+
+    # Not an option default, which could not be told apart from a user's -csg
+    if cutoff_entropy_grimme is None and cutoff_entropy_truhlar is None:
+        cutoff_entropy_grimme = DEFAULT_CUTOFF_ENTROPY_GRIMME
 
     try:
         thermo_kwargs = build_thermochemistry_kwargs(
@@ -612,7 +629,6 @@ def _load_molecules_from_directory(
             # Thermochemistry validates:
             # - normal_termination (via file_object)
             # - imaginary frequencies (via cleaned_frequencies in __init__)
-            from chemsmart.analysis.thermochemistry import Thermochemistry
 
             thermo = Thermochemistry(
                 filename=filepath,
@@ -734,6 +750,7 @@ def create_grouper_job_from_context(
     # Use threshold from parent command (None if not specified)
     threshold = ctx.obj["threshold"]
     matrix_format = ctx.obj.get("matrix_format", "xlsx")
+    representative_strategy = ctx.obj.get("representative", "lowest")
 
     return GrouperJob(
         molecules=molecules,
@@ -746,6 +763,7 @@ def create_grouper_job_from_context(
         conformer_ids=conformer_ids,
         skipped_ids=skipped_ids,
         matrix_format=matrix_format,
+        representative_strategy=representative_strategy,
         energy_type=energy_type,
         thermo_parameters=thermo_parameters,
         **extra_kwargs,

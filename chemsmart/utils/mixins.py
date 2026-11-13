@@ -16,6 +16,7 @@ Key mixin classes:
 """
 
 import inspect
+import logging
 import os
 import re
 from contextlib import contextmanager
@@ -34,6 +35,8 @@ from chemsmart.utils.repattern import (
     orca_date_pattern,
     xtb_date_pattern,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class FileMixin:
@@ -575,14 +578,26 @@ class GaussianFileMixin(FileMixin):
         """
         Check if file contains a Gaussian link job.
 
-        Searches for link job indicators such as 'stable=opt' in
-        route lines to determine if this is a multi-step job.
+        Searches for link job indicators such as ``stable=opt`` in complete
+        route blocks. Gaussian may wrap a route across multiple lines.
 
         Returns:
             bool: True if link job detected, False otherwise.
         """
-        for line in self.contents:
-            if line.startswith("#") and "stable=opt" in line:
+        lines = self.contents
+        for i, line in enumerate(lines):
+            if not line.startswith("#"):
+                continue
+
+            route_lines = [line]
+            for continuation in lines[i + 1 :]:
+                if not continuation or continuation.startswith(
+                    ("------", "#")
+                ):
+                    break
+                route_lines.append(continuation)
+
+            if "stable=opt" in "".join(route_lines).lower():
                 return True
         return False
 
@@ -950,6 +965,16 @@ class GaussianFileMixin(FileMixin):
 
         title = f"Job prepared from Gaussian file {filename}"
 
+        # Gaussian output files expose custom SMD parameters as a dictionary
+        # for convenient programmatic inspection, whereas job settings use
+        # the free-form text that is written back to a Gaussian input file.
+        # Convert only at this boundary so both APIs keep their intended type.
+        custom_solvent = self.custom_solvent
+        if isinstance(custom_solvent, dict):
+            custom_solvent = "\n".join(
+                f"{key}={value}" for key, value in custom_solvent.items()
+            )
+
         return GaussianJobSettings(
             ab_initio=self.ab_initio,
             functional=self.functional,
@@ -974,7 +999,7 @@ class GaussianFileMixin(FileMixin):
             heavy_elements=self.heavy_elements,
             heavy_elements_basis=self.heavy_elements_basis,
             light_elements_basis=self.light_elements_basis,
-            custom_solvent=self.custom_solvent,
+            custom_solvent=custom_solvent,
             append_additional_info=None,
             forces=False,
         )
@@ -1425,7 +1450,7 @@ class XTBFileMixin(FileMixin):
     Mixin class for xTB computational chemistry files.
 
     Extends FileMixin with xTB-specific functionality including
-    route string parsing, job type detection, and settings extraction.
+    program call parsing, job type detection, and settings extraction.
     Handles xTB file formats and calculation parameters.
     """
 
@@ -1464,19 +1489,19 @@ class XTBFileMixin(FileMixin):
     @property
     def route_string(self):
         """
-        Get the route string from xTB main output file.
+        Get the program call from xTB main output file.
 
         Returns the computational route string as defined in the
         program call. Implementation is provided by subclasses.
 
         Returns:
-            str: Route string for xTB calculations.
+            str: Program call for xTB calculations.
         """
         return self._get_route()
 
     def _get_route(self):
         """
-        Get route string from file contents.
+        Get program call from file contents.
 
         Default implementation that must be overridden by subclasses
         to provide specific route string extraction logic.
@@ -1489,9 +1514,9 @@ class XTBFileMixin(FileMixin):
     @property
     def route_object(self):
         """
-        Get parsed xTB route object from route string.
+        Get parsed xTB route object from the program call.
 
-        Creates an XTBRoute object from the route string to
+        Creates an XTBRoute object from the program call to
         provide structured access to calculation parameters.
 
         Returns:
@@ -1501,7 +1526,7 @@ class XTBFileMixin(FileMixin):
 
     @property
     def method(self):
-        """Get the computational method from xTB route string or output Hamiltonian."""
+        """Get the computational method from the xTB program call or output Hamiltonian."""
         gfn = self.route_object.method
         if gfn:
             return gfn
@@ -2280,3 +2305,32 @@ class FolderMixin:
             if re.match(regex, file):
                 all_files.append(os.path.join(self.folder, file))
         return all_files
+
+
+class FolderOutputMixin:
+    """Mixin for output classes that read from a calculation folder."""
+
+    FILE_PARSERS = ()
+
+    def __getattr__(self, name):
+        """Delegate attribute access to internal file parsers.
+
+        Searches the file parsers specified by FILE_PARSERS in order and returns the requested
+        attribute from the first parser that provides it. Parser attributes that are None or do
+        not provide the requested attribute are skipped. Raises AttributeError when no parser
+        provides the requested attribute.
+        """
+        for file_parser in self.FILE_PARSERS:
+            try:
+                parser = object.__getattribute__(self, file_parser)
+                if parser is not None:
+                    try:
+                        return getattr(parser, name)
+                    except AttributeError:
+                        continue
+            except Exception as e:
+                logger.debug(f"Failed to access parser {file_parser}: {e}")
+                continue
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )

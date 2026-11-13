@@ -93,6 +93,9 @@ What ``make configure`` does on Git Bash:
 
 #. **Copies templates** — copies the bundled ``.chemsmart`` configuration templates to ``~/.chemsmart``.
 
+#. **Updates project templates** — adds missing project directories and files from newer bundled templates without
+   overwriting existing or user-created files.
+
 #. **Updates** ``~/.bashrc`` — appends ``export PATH=...`` and ``export PYTHONPATH=...`` lines so that the ``chemsmart``
    command is available in new Git Bash sessions.
 
@@ -140,7 +143,7 @@ or
 
 .. note::
 
-   If ``~/.bashrc`` already contains a chemsmart section (i.e. ``make configure`` has been run before), it will *not* be
+   If ``~/.bashrc`` already contains a CHEMSMART section (i.e. ``make configure`` has been run before), it will *not* be
    modified again to avoid duplicate entries.
 
 .. tip::

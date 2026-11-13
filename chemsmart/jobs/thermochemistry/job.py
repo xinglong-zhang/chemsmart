@@ -13,7 +13,6 @@ from typing import Type
 from chemsmart.analysis.thermochemistry import Thermochemistry
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import JobRunner
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 
 logger = logging.getLogger(__name__)
@@ -189,7 +188,7 @@ class ThermochemistryJob(Job):
         Returns:
             bool: True if output file exists, False otherwise
         """
-        return os.path.exists(self.settings.outputfile)
+        return os.path.exists(self.settings.outputfile or self.outputfile)
 
     def _run(self, **kwargs):
         """
@@ -244,29 +243,14 @@ class ThermochemistryJob(Job):
         if label is None:
             label = os.path.splitext(os.path.basename(filename))[0]
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecule,
-                    settings=settings,
-                    label=label,
-                    filename=filename,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecule=molecule,
-            settings=settings,
-            label=label,
-            filename=filename,
-            jobrunner=jobrunner,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                molecule=molecule,
+                settings=settings,
+                label=label,
+                filename=filename,
+            ),
             **kwargs,
         )
 

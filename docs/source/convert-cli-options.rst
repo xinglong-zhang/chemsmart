@@ -30,8 +30,12 @@ convert --help`` for the complete list.
       -  Input molecular structure file for single-file conversion
 
    -  -  ``-o, --output``
+
       -  string
-      -  Output file path (format is inferred from the extension). Required when ``--input`` is used
+
+      -  Output file path (format is inferred from the extension). Optional for single-file conversion; may be an
+         extension only (e.g. ``.xyz`` or ``xyz``) to keep the input basename. When omitted with ``--input``, writes
+         ``{input_stem}.xyz`` by default
 
    -  -  ``-d, --directory``
       -  string
@@ -49,7 +53,8 @@ convert --help`` for the complete list.
 
    -  -  ``--output-filetype``
       -  string
-      -  Output file type used in batch mode when ``--output`` is not specified (default: ``xyz``)
+      -  Output file type when ``--output`` is not specified (default: ``xyz``). Used for single-file and batch
+         conversion
 
    -  -  ``-z/--no-z, --include-intermediate-structures/--no-include-intermediate-structures``
       -  bool
@@ -57,16 +62,22 @@ convert --help`` for the complete list.
 
 .. note::
 
-   Provide either ``--input`` / ``--output`` (single-file) or ``--directory`` / ``--filetype`` (batch), not both.
+   Provide either ``--input`` (single-file) or ``--directory`` / ``--filetype`` (batch), not both.
 
 ************************
  Single-File Conversion
 ************************
 
-Single-file conversion infers the output format from the ``--output`` extension:
+When ``--output`` is omitted, the output path defaults to ``{input_stem}.xyz`` in the same directory as the input. Use
+``--output-filetype`` to change the default extension (e.g. ``com``). You may also pass only an extension to
+``--output`` (e.g. ``.mol2`` or ``mol2``) to keep the input basename.
+
+Single-file conversion infers the output format from the resolved output path extension:
 
 .. code:: bash
 
+   chemsmart run convert -i molecule.pdb
+   chemsmart run convert -i molecule.pdb -o .mol2
    chemsmart run convert -i molecule.pdb -o molecule.xyz
    chemsmart run convert -i molecule.log -o molecule.mol2
 

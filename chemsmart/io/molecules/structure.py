@@ -7,7 +7,7 @@ import os
 import re
 import tempfile
 from contextlib import contextmanager
-from functools import cached_property, lru_cache
+from functools import lru_cache
 
 import networkx as nx
 import numpy as np
@@ -15,7 +15,13 @@ from ase import units
 from ase.io import read as ase_read
 from ase.symbols import Symbols
 from rdkit import Chem
-from rdkit.Chem import rdchem
+from rdkit.Chem import (
+    Descriptors,
+    Descriptors3D,
+    rdchem,
+    rdDetermineBonds,
+    rdMolHash,
+)
 from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
@@ -31,6 +37,13 @@ from chemsmart.utils.utils import file_cache, string2index_1based
 p = pt()
 
 logger = logging.getLogger(__name__)
+
+# Default buffers (Angstrom) added to covalent radii in Molecule.to_graph().
+# Bond orders scale with the cutoff, so raising the order buffer would change
+# existing orders. Long bonds to non-hydrogen atoms, such as C-F at 1.38-1.40,
+# are therefore detected with a separate, larger buffer.
+GRAPH_BOND_ORDER_BUFFER = 0.05
+GRAPH_CONNECTIVITY_BUFFER = 0.2
 
 # Extensions that must use ASE (Open Babel either cannot read them or
 # silently drops cell / PBC information). Kept as a module-level set so
@@ -89,15 +102,20 @@ class Molecule:
         where the key is the bonded atom pair indices and the value is
         a list of scale factors for (low, medium, high).
     structure_index_in_file: int | None
-        1-based index of this structure within the source file, if applicable.
+        1-based index of this structure within the source file,
+        if applicable.
     rotational_symmetry_number: int | None
-        Rotational symmetry number of the molecule (from thermochemistry or parser), if available.
+        Rotational symmetry number of the molecule
+        (from thermochemistry or parser), if available.
     mulliken_atomic_charges: dict[str, float] | None
-        Per-atom Mulliken charges keyed like "O1", "C2" (1-indexed), if available.
+        Per-atom Mulliken charges keyed like "O1", "C2" (1-indexed),
+        if available.
     mulliken_spin_densities: dict[str, float] | None
-        Per-atom Mulliken spin densities (same keys as mulliken_atomic_charges), if available.
+        Per-atom Mulliken spin densities (same keys as mulliken_atomic_charges),
+        if available.
     is_optimized_structure: bool | None
-        Whether this structure corresponds to an optimized step/final optimized geometry.
+        Whether this structure corresponds to an optimized step/
+        final optimized geometry.
     dipole_moment: numpy array | None
         Dipole moment [X, Y, Z] components in Debye, if available.
     dipole_moment_magnitude: float | None
@@ -108,6 +126,13 @@ class Molecule:
         Molecular point group string (e.g. "CS", "C2V"), if available.
     info: dict
         A dictionary containing additional information about the molecule.
+    twod_descriptors: dict
+        The full set of RDKit 2D descriptors for a molecule.
+    threed_descriptors: dict
+        RDKit descriptors derived from a molecule's 3D structure.
+    sterimol_parameter: dict | None
+        Latest result of calculate_sterimol_parameters() (L, B1, B5, pos),
+        or None if not calculated yet.
     """
 
     def __init__(
@@ -168,6 +193,7 @@ class Molecule:
         )
         self.rotational_constants = rotational_constants
         self.point_group = point_group
+        self._sterimol = None
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond
@@ -279,6 +305,8 @@ class Molecule:
             raise ValueError(f"positions must be (N, 3); got {arr.shape}")
         # store a copy to avoid accidental aliasing
         self._positions = arr.copy()
+        # geometry-dependent result is no longer valid
+        self._sterimol = None
 
     @property
     def empirical_formula(self):
@@ -361,27 +389,28 @@ class Molecule:
         """
         return np.average(self.positions, axis=0, weights=self.masses)
 
-    @cached_property
+    @property
     def canonical_positions(self):
         """Canonical atomic positions.
-        The positions are translated to the centre of mass and rotated into
-        the principal-axes frame of the moment-of-inertia tensor, with a
-        deterministic sign convention applied to each axis. The result is
-        invariant under translation and rotation of the original coordinates.
+        The positions are translated to the centre of mass and rotated
+        into the principal-axes frame of the moment-of-inertia tensor,
+        with a deterministic sign convention applied to each axis.
+        The result is invariant under translation and rotation of the
+        original coordinates.
         """
         return canonicalize_positions(self.masses, self.positions)
 
-    @cached_property
+    @property
     def canonical_geometry(self):
         """Canonical string representation of the molecular geometry.
         Atoms are sorted lexicographically by (symbol, x, y, z) after
-        canonicalization, yielding a representation that is invariant under
-        translation, rotation and atom-index permutation.
+        canonicalization, yielding a representation that is invariant
+        under translation, rotation and atom-index permutation.
 
-        Note on precision: coordinates are rounded to 4 decimal places
-        (~1e-4 Å) to absorb sub-threshold numerical noise in the canonical
-        positions (e.g. floating-point differences across platforms or
-        minor coordinate perturbations). This is an engineering compromise:
+        Note on precision: coordinates are rounded to 3 decimal places
+        (~1e-3 Å) to absorb sub-threshold numerical noise in the canonical
+        positions (e.g. floating-point differences across platforms or minor
+        coordinate perturbations). This is an engineering compromise:
         in rare cases (e.g. perfectly symmetric spherical-top molecules),
         the canonical frame is not uniquely defined due to degeneracy of the
         inertia tensor. As a result, canonical_positions may differ across
@@ -389,8 +418,10 @@ class Molecule:
         canonical_geometry (and thus structure_id) is not strictly guaranteed
         to be invariant in such cases.
         """
-        decimals = 4
-        rounded = np.round(self.canonical_positions, decimals=decimals)
+        decimals = 3
+        rounded = (
+            np.round(self.canonical_positions, decimals=decimals) + 0.0
+        )  # drop negative zero
         atoms = sorted(zip(self.chemical_symbols, rounded.tolist()))
         parts = [
             f"{sym}:{x:.{decimals}f},{y:.{decimals}f},{z:.{decimals}f}"
@@ -398,7 +429,7 @@ class Molecule:
         ]
         return ";".join(parts)
 
-    @cached_property
+    @property
     def structure_id(self):
         """Unique structural identifier (SHA-256 hex digest).
         Computed from canonical_geometry, charge and multiplicity.
@@ -429,7 +460,7 @@ class Molecule:
         """
         return self.get_chemical_formula()
 
-    @cached_property
+    @property
     def inchikey(self):
         """InChIKey string for the molecule (27-character).
         Computed via Open Babel for robust topological perception,
@@ -464,7 +495,7 @@ class Molecule:
 
         return result
 
-    @cached_property
+    @property
     def molecule_id(self):
         """Unique molecular identifier (InChIKey string).
         Two molecules with identical connectivity and stereochemistry
@@ -472,7 +503,7 @@ class Molecule:
         """
         return self.inchikey
 
-    @cached_property
+    @property
     def molecule_label(self):
         """Unique, human-readable label for the molecule.
         Combines the chemical formula with the molecule_id, e.g.
@@ -491,7 +522,7 @@ class Molecule:
         """
         return Chem.MolToCXSmiles(self.to_rdkit())
 
-    @cached_property
+    @property
     def inchi(self):
         """Full InChI string for the molecule.
         Computed via Open Babel (same XYZ-based pipeline as ``inchikey``).
@@ -523,14 +554,14 @@ class Molecule:
 
         return result
 
-    @cached_property
+    @property
     def smiles(self):
         """SMILES string for the molecule (convenience property).
         Equivalent to calling ``to_smiles()``.
         """
         return self.to_smiles()
 
-    @cached_property
+    @property
     def chemical_symbols(self):
         """
         Return a list of chemical symbols strings
@@ -816,7 +847,7 @@ class Molecule:
         """
         Calculate the moment of inertia tensor of the molecule.
         """
-        moi_tensor, _, _ = self._get_moments_of_inertia
+        moi_tensor, _, _ = self._moments_of_inertia
         return np.array(moi_tensor)
 
     @property
@@ -828,7 +859,7 @@ class Molecule:
         if self.is_monoatomic:
             return [0.0, 0.0, 0.0]
         else:
-            _, eigenvalues, _ = self._get_moments_of_inertia
+            _, eigenvalues, _ = self._moments_of_inertia
             return eigenvalues
 
     @property
@@ -839,7 +870,7 @@ class Molecule:
         if self.is_monoatomic:
             return [0.0, 0.0, 0.0]
         else:
-            _, eigenvalues, _ = self._get_moments_of_inertia_weighted_mass
+            _, eigenvalues, _ = self._moments_of_inertia_weighted_mass
             logger.debug(f"Moments of inertia (weighted mass): {eigenvalues}.")
             return eigenvalues
 
@@ -851,7 +882,7 @@ class Molecule:
         if self.is_monoatomic:
             return [0.0, 0.0, 0.0]
         else:
-            _, eigenvalues, _ = self._get_moments_of_inertia_most_abundant_mass
+            _, eigenvalues, _ = self._moments_of_inertia_most_abundant_mass
             logger.debug(
                 f"Moments of inertia (most abundant mass): {eigenvalues}."
             )
@@ -863,63 +894,55 @@ class Molecule:
         Obtain moments of inertia along
         principal axes from molecular structure.
         """
-        _, _, eigenvectors = self._get_moments_of_inertia
+        _, _, eigenvectors = self._moments_of_inertia
         return eigenvectors
 
-    @cached_property
-    def _get_moments_of_inertia(self):
+    @property
+    def _moments_of_inertia(self):
         """
         Calculate the moments of inertia of the molecule.
         Units of amu Å^2.
         """
-        if self.num_atoms == 1:
-            return np.zeros(3)
-        else:
-            from chemsmart.utils.geometry import calculate_moments_of_inertia
+        from chemsmart.utils.geometry import calculate_moments_of_inertia
 
-            return calculate_moments_of_inertia(self.masses, self.positions)
+        return calculate_moments_of_inertia(self.masses, self.positions)
 
-    @cached_property
-    def _get_moments_of_inertia_weighted_mass(self):
+    @property
+    def _moments_of_inertia_weighted_mass(self):
         """
-        Calculate the moments of inertia of the
-        molecule. Use natural abundance weighted masses.
+        Calculate the moments of inertia of the molecule using
+        the natural abundance weighted masses.
         Units of amu Å^2.
         """
-        if self.num_atoms == 1:
-            return np.zeros(3)
-        else:
-            from chemsmart.utils.geometry import calculate_moments_of_inertia
+        from chemsmart.utils.geometry import calculate_moments_of_inertia
 
-            return calculate_moments_of_inertia(
-                self.natural_abundance_weighted_masses, self.positions
-            )
+        return calculate_moments_of_inertia(
+            self.natural_abundance_weighted_masses, self.positions
+        )
 
-    @cached_property
-    def _get_moments_of_inertia_most_abundant_mass(self):
+    @property
+    def _moments_of_inertia_most_abundant_mass(self):
         """
-        Calculate the moments of inertia of
-        the molecule. Use most abundant masses.
+        Calculate the moments of inertia of the molecule using
+        the most abundant masses.
         Units of amu Å^2.
         """
-        if self.num_atoms == 1:
-            return np.zeros(3)
-        else:
-            from chemsmart.utils.geometry import calculate_moments_of_inertia
+        from chemsmart.utils.geometry import calculate_moments_of_inertia
 
-            return calculate_moments_of_inertia(
-                self.most_abundant_masses, self.positions
-            )
+        return calculate_moments_of_inertia(
+            self.most_abundant_masses, self.positions
+        )
 
-    @cached_property
+    @property
     def rotational_temperatures(self):
         """
         Obtain the rotational temperatures of the molecule in K.
         Θ_r,i = h^2 / (8 * pi^2 * I_i * k_B) for i = x, y, z
 
-        For linear molecules the moment of inertia along the molecular axis is
-         (effectively) zero, so the axial rotational temperature is infinite. For
-         linear molecules this property returns only the finite perpendicular-axis value.
+        For linear molecules the moment of inertia along the molecular axis
+        is (effectively) zero, so the axial rotational temperature is infinite.
+        For linear molecules this property returns only the finite
+        perpendicular-axis value.
         """
         moi_in_SI_units = [
             float(i) * units._amu * (1 / units.m) ** 2
@@ -938,6 +961,202 @@ class Molecule:
             return [result[-1]]
         return result
 
+    @property
+    def sterimol_parameter(self):
+        """
+        Result of the latest calculate_sterimol_parameters() call.
+
+        Sterimol parameters depend on the chosen atom1/atom2 axis, so they
+        cannot be computed on demand. Returns None if they have not been
+        calculated yet, or if the positions were reassigned since.
+        """
+        return self._sterimol
+
+    def calculate_sterimol_parameters(
+        self, atom1: int, atom2: int, excluded_atoms=None
+    ):
+        """
+        Calculate the Sterimol parameters L, B1 and B5 of a substituent.
+
+        The molecule is not modified. Van der Waals radii come from the RDKit
+        periodic table, and L is reported without Verloop's +0.40 A
+        correction.
+
+        Args:
+            atom1 (int): 1-based index of the atom the substituent is bonded
+                to (often a dummy H). It is left out of the measurement and
+                defines the origin of the axis.
+            atom2 (int): 1-based index of the first substituent atom. The
+                atom1->atom2 vector defines the +z axis.
+            excluded_atoms (Iterable[int] | None): 1-based indices of further
+                atoms to leave out. All atoms other than atom1 count as the
+                substituent, so when atom1 has other neighbours, list the
+                rest of the molecule here.
+
+        Returns:
+            dict: "L", "B1" and "B5" in Angstrom, and "pos", the (N, 3)
+            aligned coordinates of all atoms. "pos" is a NumPy array, so atom
+            n is at pos[n - 1].
+
+        Raises:
+            TypeError: If an atom index is not an integer.
+            IndexError: If an atom index is outside 1..num_atoms.
+            ValueError: If atom1 and atom2 overlap, or atom2 is excluded.
+        """
+        excluded = [] if excluded_atoms is None else list(excluded_atoms)
+        self._validate_geometry_indices(atom1, atom2, *excluded)
+        atom1_idx = atom1 - 1
+        atom2_idx = atom2 - 1
+
+        # Work on a copy so that the molecule's own coordinates are untouched
+        positions = np.array(self.positions, dtype=float)
+        positions -= positions[atom1_idx].copy()
+
+        # Rodrigues rotation to place atom2 on the +z axis
+        # v: rotation axis, z_axis: target direction, theta: rotation angle
+        z_axis = np.array([0.0, 0.0, 1.0])
+        if np.isclose(np.linalg.norm(positions[atom2_idx]), 0.0):
+            raise ValueError(
+                "atom2 vector norm too close to zero, atom1 and atom2 overlap?"
+            )
+        norm_atom2 = positions[atom2_idx] / np.linalg.norm(
+            positions[atom2_idx]
+        )
+        v = np.cross(norm_atom2, z_axis)
+        if not np.isclose(np.linalg.norm(v), 0):
+            v /= np.linalg.norm(v)
+            cos_theta = np.dot(z_axis, norm_atom2)
+            theta = np.arccos(np.clip(cos_theta, -1, 1))
+
+            k = np.array(
+                [[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]]
+            )
+
+            identity = np.eye(3)
+            r = identity + np.sin(theta) * k + (1.0 - np.cos(theta)) * (k @ k)
+            positions = positions @ r.T
+
+        elif positions[atom2_idx][2] < 0:
+            # Atom2 on -z: rotate 180 degrees about x. Negating all coordinates
+            # would be an inversion, which turns the molecule into its mirror
+            # image.
+            positions = positions * np.array([1.0, -1.0, -1.0])
+
+        # Select the atoms that make up the substituent
+        included = np.ones(len(positions), dtype=bool)
+        included[atom1_idx] = False
+        included[[idx - 1 for idx in excluded]] = False
+        if not included[atom2_idx] and atom1 != atom2:
+            raise ValueError(f"atom2 ({atom2}) cannot be in excluded_atoms.")
+
+        pt = rdchem.GetPeriodicTable()
+        radii = np.array([pt.GetRvdw(str(symb)) for symb in self.symbols])
+        radii = radii[included]
+        xy = positions[included, :2]
+        z = positions[included, 2]
+
+        # L: furthest extent along the atom1->atom2 axis
+        length = np.max(z + radii)
+
+        # B5: largest distance from the axis
+        b5 = np.max(np.hypot(xy[:, 0], xy[:, 1]) + radii)
+
+        # B1: smallest, over all directions perpendicular to the axis, of the
+        # substituent's furthest extent in that direction
+        phi = np.linspace(0, 2 * np.pi, 3600, endpoint=False)
+        directions = np.column_stack((np.cos(phi), np.sin(phi)))
+        b1 = np.min(np.max(directions @ xy.T + radii, axis=1))
+
+        self._sterimol = {
+            "L": length,
+            "B1": b1,
+            "B5": b5,
+            "pos": positions,
+        }
+
+        return self._sterimol
+
+    def get_substituent_atoms(self, atom1, atom2):
+        """
+        Return the atoms on the atom2 side of the atom1-atom2 bond.
+
+        Connectivity comes from to_graph(), which infers bonds from distances,
+        so check the result for metal complexes and transition states. Atoms
+        connected to neither side, such as a counterion, are left out with a
+        warning.
+
+        Args:
+            atom1 (int): 1-based index of the atom on the parent side.
+            atom2 (int): 1-based index of the first substituent atom.
+
+        Returns:
+            list[int]: Sorted 1-based indices of the substituent, including
+            atom2.
+
+        Raises:
+            ValueError: If the atoms are not bonded, or the bond is in a ring,
+                so that cutting it does not separate them.
+        """
+        self._validate_geometry_indices(atom1, atom2)
+        atom1_idx = atom1 - 1
+        atom2_idx = atom2 - 1
+
+        graph = self.to_graph()
+        if not graph.has_edge(atom1_idx, atom2_idx):
+            raise ValueError(
+                f"Atoms {atom1} and {atom2} are not bonded in the connectivity "
+                "inferred from the geometry."
+            )
+        graph.remove_edge(atom1_idx, atom2_idx)
+        if nx.has_path(graph, atom1_idx, atom2_idx):
+            raise ValueError(
+                f"The bond between atoms {atom1} and {atom2} is in a ring, so "
+                "cutting it does not separate a substituent."
+            )
+        substituent = nx.node_connected_component(graph, atom2_idx)
+        parent = nx.node_connected_component(graph, atom1_idx)
+        unassigned = sorted(
+            int(idx) + 1 for idx in set(graph) - substituent - parent
+        )
+        if unassigned:
+            logger.warning(
+                f"Atoms {unassigned} are connected to neither side of the "
+                f"{atom1}-{atom2} bond and were left out of the substituent."
+            )
+        return sorted(int(idx) + 1 for idx in substituent)
+
+    @property
+    def twod_descriptors(self):
+        """
+        All RDKit 2D descriptors, recomputed on each access.
+
+        Bonds are perceived from the geometry with
+        ``to_rdkit(bond_method="rdkit")``, which uses the molecule's charge.
+
+        Returns:
+            dict: Descriptor name to value, from
+            ``rdkit.Chem.Descriptors.CalcMolDescriptors``.
+        """
+        return Descriptors.CalcMolDescriptors(
+            self.to_rdkit(bond_method="rdkit")
+        )
+
+    @property
+    def threed_descriptors(self):
+        """
+        All RDKit 3D shape descriptors, recomputed on each access.
+
+        Bonds are perceived as in ``twod_descriptors``, and the molecule's
+        own coordinates are used as the conformer.
+
+        Returns:
+            dict: Descriptor name to value, from
+            ``rdkit.Chem.Descriptors3D.CalcMolDescriptors3D``.
+        """
+        return Descriptors3D.CalcMolDescriptors3D(
+            self.to_rdkit(bond_method="rdkit")
+        )
+
     def get_chemical_formula(self, mode="hill", empirical=False):
         """
         Get chemical formula with flexible formatting options.
@@ -952,15 +1171,28 @@ class Molecule:
         Calculate the distance between two points.
         Use 1-based indexing for idx1 and idx2.
         """
+        self._validate_geometry_indices(idx1, idx2)
         return np.linalg.norm(
             self.positions[idx1 - 1] - self.positions[idx2 - 1]
         )
+
+    def _validate_geometry_indices(self, *indices):
+        """Validate public, 1-based atom indices used by geometry methods."""
+        for idx in indices:
+            if isinstance(idx, bool) or not isinstance(idx, (int, np.integer)):
+                raise TypeError("Atom indices must be integers.")
+            if idx < 1 or idx > self.num_atoms:
+                raise IndexError(
+                    f"Atom index {idx} is outside the valid 1-based range "
+                    f"1..{self.num_atoms}."
+                )
 
     def get_angle(self, idx1, idx2, idx3):
         """
         Calculate the angle between three points.
         Use 1-based indexing for idx1, idx2, and idx3.
         """
+        self._validate_geometry_indices(idx1, idx2, idx3)
         return self.get_angle_from_positions(
             self.positions[idx1 - 1],
             self.positions[idx2 - 1],
@@ -973,7 +1205,13 @@ class Molecule:
         """
         v1 = position1 - position2
         v2 = position3 - position2
-        cos_theta = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+        denominator = np.linalg.norm(v1) * np.linalg.norm(v2)
+        if np.isclose(denominator, 0.0):
+            raise ValueError(
+                "Angle is undefined when either vector has zero length."
+            )
+        cos_theta = np.dot(v1, v2) / denominator
+        cos_theta = np.clip(cos_theta, -1.0, 1.0)
         return np.degrees(np.arccos(cos_theta))
 
     def get_dihedral(self, idx1, idx2, idx3, idx4):
@@ -982,6 +1220,7 @@ class Molecule:
         points, about bond formed by idx2 and idx3.
         Use 1-based indexing for idx1, idx2, idx3, and idx4.
         """
+        self._validate_geometry_indices(idx1, idx2, idx3, idx4)
         return self.get_dihedral_from_positions(
             self.positions[idx1 - 1],
             self.positions[idx2 - 1],
@@ -995,13 +1234,35 @@ class Molecule:
         """
         Calculate the dihedral angle between four points.
         """
-        v1 = position1 - position2
-        v2 = position3 - position2
-        v3 = position4 - position3
-        n1 = np.cross(v1, v2)
-        n2 = np.cross(v2, v3)
-        x = np.dot(n1, n2)
-        y = np.dot(np.cross(n1, v2), n2)
+        position1, position2, position3, position4 = map(
+            lambda position: np.asarray(position, dtype=float),
+            (position1, position2, position3, position4),
+        )
+        bond1 = position1 - position2
+        central_bond = position3 - position2
+        bond3 = position4 - position3
+
+        central_bond_norm = np.linalg.norm(central_bond)
+        if central_bond_norm < 1e-12:
+            raise ValueError("Points 2 and 3 must be distinct.")
+        central_bond_unit = central_bond / central_bond_norm
+
+        # Project both outer bonds onto the plane perpendicular to the
+        # central bond.  Their signed angle is the molecular dihedral.
+        projected1 = (
+            bond1 - np.dot(bond1, central_bond_unit) * central_bond_unit
+        )
+        projected3 = (
+            bond3 - np.dot(bond3, central_bond_unit) * central_bond_unit
+        )
+        if (
+            np.linalg.norm(projected1) < 1e-12
+            or np.linalg.norm(projected3) < 1e-12
+        ):
+            raise ValueError("Dihedral is undefined for collinear points.")
+
+        x = np.dot(projected1, projected3)
+        y = np.dot(np.cross(central_bond_unit, projected1), projected3)
         return np.degrees(np.arctan2(y, x))
 
     def copy(self):
@@ -1185,11 +1446,11 @@ class Molecule:
                 "Only Gaussian, ORCA, and xTB are currently supported."
             )
 
-        if basename.endswith(".gro"):
-            return cls._read_gromacs_gro(filepath, index, **kwargs)
+        # if basename.endswith(".gro"):
+        #     return cls._read_gromacs_gro(filepath, index, **kwargs)
 
-        if basename.endswith(".trr"):
-            return cls._read_gromacs_trr(filepath, index, **kwargs)
+        # if basename.endswith(".trr"):
+        #     return cls._read_gromacs_trr(filepath, index, **kwargs)
 
         # if basename.endswith(".traj"):
         #     return cls._read_traj_file(filepath, index, **kwargs)
@@ -1908,7 +2169,7 @@ class Molecule:
         mode="w",
         flavor=0,
         add_bonds=True,
-        bond_cutoff_buffer=0.05,
+        bond_cutoff_buffer=None,
         adjust_H=True,
         **kwargs,
     ):
@@ -2199,7 +2460,7 @@ class Molecule:
         """
         return f"{self.__class__.__name__}<{self.empirical_formula},energy: {self.energy}>"
 
-    @cached_property
+    @property
     def distance_matrix(self):
         """
         Compute pairwise distance matrix.
@@ -2306,7 +2567,7 @@ class Molecule:
         self,
         flavor=0,
         add_bonds=True,
-        bond_cutoff_buffer=0.05,
+        bond_cutoff_buffer=None,
         adjust_H=True,
     ):
         """
@@ -2481,21 +2742,65 @@ class Molecule:
             info=self.info,
         )
 
-    def to_rdkit(self, add_bonds=True, bond_cutoff_buffer=0.05, adjust_H=True):
+    def to_rdkit(
+        self,
+        add_bonds=True,
+        bond_cutoff_buffer=None,
+        adjust_H=True,
+        bond_method="chemsmart",
+    ):
         """Convert Molecule object to RDKit Mol
         with proper stereochemistry handling.
         Args:
             add_bonds (bool): Flag to add bonds to molecule or not.
-            bond_cutoff_buffer (float): Additional
+            bond_cutoff_buffer (float | None): Additional
             buffer for bond cutoff distance.
             From testing, see test_resonance_handling,
             it seems that a value of 0.1Å
             works for ozone, acetone, benzene,
             and probably other molecules, too.
-            adjust_Hs (bool): Adjust bond distances to H atoms.
+            By default, bond orders use GRAPH_BOND_ORDER_BUFFER, and pairs of
+            non-hydrogen atoms within GRAPH_CONNECTIVITY_BUFFER that this
+            misses are added as single bonds, as in to_graph().
+            adjust_H (bool): Adjust bond distances to H atoms.
+            bond_method (str): Method used to perceive bonds. ``"chemsmart"``
+                preserves the existing distance-based bond detection, while
+                ``"rdkit"`` uses RDKit to determine connectivity and bond
+                orders. Defaults to ``"chemsmart"``.
         Returns:
             RDKit Mol: RDKit molecule object.
         """
+
+        if bond_method not in {"chemsmart", "rdkit"}:
+            raise ValueError(
+                "bond_method must be either 'chemsmart' or 'rdkit'"
+            )
+
+        if bond_method == "rdkit":
+            if not add_bonds:
+                raise ValueError(
+                    "add_bonds=False is incompatible with bond_method='rdkit'"
+                )
+
+            xyz_lines = [str(self.num_atoms), ""]
+            xyz_lines.extend(
+                f"{symbol} {x:.10f} {y:.10f} {z:.10f}"
+                for symbol, (x, y, z) in zip(
+                    self.chemical_symbols, self.positions
+                )
+            )
+            xyz_block = "\n".join(xyz_lines) + "\n"
+
+            rdkit_mol = Chem.MolFromXYZBlock(xyz_block)
+            if rdkit_mol is None:
+                raise ValueError(
+                    "RDKit failed to create a molecule from XYZ coordinates."
+                )
+
+            charge = 0 if self.charge is None else int(self.charge)
+            rdDetermineBonds.DetermineBonds(rdkit_mol, charge=charge)
+            Chem.SanitizeMol(rdkit_mol)
+            return rdkit_mol
 
         # Create molecule and add atoms
         rdkit_mol = Chem.RWMol()
@@ -2541,12 +2846,70 @@ class Molecule:
 
         return rdkit_mol.GetMol()
 
+    def get_rdkit_hash(self, ignore_hydrogens=False):
+        """Return the canonical RDKit molecular-graph hash.
+
+        Args:
+            ignore_hydrogens (bool): Whether to remove hydrogens before
+                calculating the hash. Defaults to False.
+
+        Returns:
+            str: Canonical SMILES hash generated by RDKit.
+        """
+        rdkit_mol = self.to_rdkit(bond_method="rdkit")
+        if ignore_hydrogens:
+            rdkit_mol = Chem.RemoveHs(rdkit_mol)
+        return rdMolHash.MolHash(
+            rdkit_mol, rdMolHash.HashFunction.CanonicalSmiles
+        )
+
+    def to_rdkit_connectivity_graph(self) -> nx.Graph:
+        """Build an element-labeled connectivity graph using RDKit perception."""
+        xyz_lines = [str(self.num_atoms), ""]
+        xyz_lines.extend(
+            f"{symbol} {x:.10f} {y:.10f} {z:.10f}"
+            for symbol, (x, y, z) in zip(self.chemical_symbols, self.positions)
+        )
+        xyz_block = "\n".join(xyz_lines) + "\n"
+
+        rdkit_mol = Chem.MolFromXYZBlock(xyz_block)
+        if rdkit_mol is None:
+            raise ValueError(
+                "RDKit failed to create a molecule from XYZ coordinates."
+            )
+
+        rdDetermineBonds.DetermineConnectivity(rdkit_mol)
+
+        graph = nx.Graph()
+        for atom in rdkit_mol.GetAtoms():
+            graph.add_node(atom.GetIdx(), element=atom.GetSymbol())
+        for bond in rdkit_mol.GetBonds():
+            graph.add_edge(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx())
+
+        return graph
+
+    def _is_long_bond(self, i, j, distance):
+        """Return True if a pair with no bond order is still bonded.
+
+        Hydrogen pairs are excluded, so that hydrogen bonds stay unbonded.
+        """
+        if "H" in (self.symbols[i], self.symbols[j]):
+            return False
+        return distance < get_bond_cutoff(
+            self.symbols[i], self.symbols[j], GRAPH_CONNECTIVITY_BUFFER
+        )
+
     def _add_bonds_to_rdkit_mol(
-        self, rdkit_mol, bond_cutoff_buffer=0.05, adjust_H=True
+        self, rdkit_mol, bond_cutoff_buffer=None, adjust_H=True
     ):
         """
         Add bonds to the RDKit molecule.
         """
+        detect_long_bonds = bond_cutoff_buffer is None
+        if detect_long_bonds:
+            bond_cutoff_buffer = GRAPH_BOND_ORDER_BUFFER
+
+        distances = self.distance_matrix
         for i in range(len(self.symbols)):
             for j in range(i + 1, len(self.symbols)):
                 if adjust_H:
@@ -2570,8 +2933,14 @@ class Molecule:
                     self.symbols[i], self.symbols[j], cutoff_buffer
                 )
                 bond_order = self.determine_bond_order_one_bond(
-                    bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
+                    bond_length=distances[i, j], bond_cutoff=cutoff
                 )
+                if (
+                    bond_order == 0
+                    and detect_long_bonds
+                    and self._is_long_bond(i, j, distances[i, j])
+                ):
+                    bond_order = 1
                 logger.debug(f"bond order: {bond_order}")
                 if bond_order > 0:
                     bond_type = {
@@ -2584,12 +2953,16 @@ class Molecule:
         return rdkit_mol
 
     def _add_bonds_to_rdkit_mol_vectorized(
-        self, rdkit_mol, bond_cutoff_buffer=0.05, adjust_H=True
+        self, rdkit_mol, bond_cutoff_buffer=None, adjust_H=True
     ):
         """
         Add bonds to the RDKit molecule using a
         vectorized approach to compute bond orders.
         """
+        detect_long_bonds = bond_cutoff_buffer is None
+        if detect_long_bonds:
+            bond_cutoff_buffer = GRAPH_BOND_ORDER_BUFFER
+
         num_atoms = len(self.symbols)
 
         # 1. Build an NxN cutoff matrix
@@ -2616,8 +2989,9 @@ class Molecule:
                 cutoff_matrix[j, i] = cutoff_ij
 
         # 2. Vectorized bond order calculation
+        distances = self.distance_matrix  # a property that recomputes each use
         bond_orders = self.determine_bond_order(
-            bond_length=self.distance_matrix,  # NxN distances
+            bond_length=distances,  # NxN distances
             bond_cutoff=cutoff_matrix,  # NxN cutoffs
         )
 
@@ -2632,13 +3006,19 @@ class Molecule:
         for i in range(num_atoms):
             for j in range(i + 1, num_atoms):
                 bo = bond_orders[i, j]
+                if (
+                    bo == 0
+                    and detect_long_bonds
+                    and self._is_long_bond(i, j, distances[i, j])
+                ):
+                    bo = 1.0
                 if bo > 0:
                     bond_type = bond_type_map.get(bo, Chem.BondType.SINGLE)
                     rdkit_mol.AddBond(i, j, bond_type)
 
         return rdkit_mol
 
-    @cached_property
+    @property
     def rdkit_fingerprints(self):
         """
         Return RDKit molecular fingerprints.
@@ -2646,7 +3026,7 @@ class Molecule:
         rdkit_mol = self.to_rdkit()
         return Chem.RDKFingerprint(rdkit_mol)
 
-    @cached_property
+    @property
     def bond_orders(self):
         """
         Return a list of bond orders from the molecular graph.
@@ -2679,7 +3059,7 @@ class Molecule:
             bond_orders.append(bond["bond_order"])
         return bond_orders
 
-    def to_graph(self, bond_cutoff_buffer=0.05, adjust_H=True) -> nx.Graph:
+    def to_graph(self, bond_cutoff_buffer=None, adjust_H=True) -> nx.Graph:
         """
         Convert a Molecule object to a connectivity
         graph with vectorized calculations.
@@ -2688,13 +3068,20 @@ class Molecule:
         Bond cutoff is obtained using Covalent
         Radii between the atoms via 𝑅_cutoff = 𝑅_𝐴 + 𝑅_𝐵 + tolerance_buffer.
         Args:
-            bond_cutoff_buffer (float): Additional
-            buffer for bond cutoff distance.
+            bond_cutoff_buffer (float | None): Additional buffer for bond
+            cutoff distance, used for both connectivity and bond orders. By
+            default, bond orders use GRAPH_BOND_ORDER_BUFFER, and pairs of
+            non-hydrogen atoms within GRAPH_CONNECTIVITY_BUFFER that this
+            misses are added as single bonds.
             adjust_H (bool): Whether to adjust hydrogen bond cutoffs.
 
         Returns:
             nx.Graph: A networkx graph object representing the molecule.
         """
+
+        detect_long_bonds = bond_cutoff_buffer is None
+        if detect_long_bonds:
+            bond_cutoff_buffer = GRAPH_BOND_ORDER_BUFFER
 
         G = nx.Graph()
         positions = np.array(self.positions)
@@ -2712,6 +3099,7 @@ class Molecule:
 
         # Compute bond cutoff matrix
         cutoff_matrix = np.zeros((num_atoms, num_atoms))
+        long_bond_cutoff_matrix = np.zeros((num_atoms, num_atoms))
 
         for i in range(num_atoms):
             for j in range(i + 1, num_atoms):
@@ -2727,11 +3115,21 @@ class Molecule:
                 cutoff_matrix[i, j] = cutoff_matrix[j, i] = get_bond_cutoff(
                     element_i, element_j, cutoff_buffer
                 )
+                if detect_long_bonds and "H" not in (element_i, element_j):
+                    long_bond_cutoff_matrix[i, j] = long_bond_cutoff_matrix[
+                        j, i
+                    ] = get_bond_cutoff(
+                        element_i, element_j, GRAPH_CONNECTIVITY_BUFFER
+                    )
 
         # Determine bond orders
         bond_orders = self.determine_bond_order(
             bond_length=distance_matrix, bond_cutoff=cutoff_matrix
         )
+        is_long_bond = (bond_orders == 0) & (
+            distance_matrix < long_bond_cutoff_matrix
+        )
+        bond_orders = np.where(is_long_bond, 1.0, bond_orders)
 
         # Add edges where bond order > 0
         i_indices, j_indices = np.where(bond_orders > 0)
@@ -2743,7 +3141,7 @@ class Molecule:
         return G
 
     def to_graph_non_vectorized(
-        self, bond_cutoff_buffer=0.05, adjust_H=True
+        self, bond_cutoff_buffer=None, adjust_H=True
     ) -> nx.Graph:
         """Convert a Molecule object to a connectivity graph, non-vectorized.
         Bond cutoff value determines the maximum distance between two atoms
@@ -2751,24 +3149,30 @@ class Molecule:
         Bond cutoff is obtained using Covalent
         Radii between the atoms via 𝑅_cutoff = 𝑅_𝐴 + 𝑅_𝐵 + tolerance_buffer.
         Args:
-            bond_cutoff_buffer (float): Additional
-            buffer for bond cutoff distance.
+            bond_cutoff_buffer (float | None): Additional buffer for bond
+            cutoff distance. See to_graph() for the default behaviour.
         Returns:
             nx.Graph: A networkx graph object representing the molecule.
         """
+        detect_long_bonds = bond_cutoff_buffer is None
+        if detect_long_bonds:
+            bond_cutoff_buffer = GRAPH_BOND_ORDER_BUFFER
+
         G = nx.Graph()
         positions = self.positions
 
         # add nodes
-        for i, symbol in enumerate(self.chemical_symbols):
+        chemical_symbols = self.chemical_symbols
+        for i, symbol in enumerate(chemical_symbols):
             G.add_node(i, element=symbol)
 
         # Add edges (bonds) with bond order
+        distances = self.distance_matrix
         for i in range(len(positions)):
             for j in range(i + 1, len(positions)):
                 element_i, element_j = (
-                    self.chemical_symbols[i],
-                    self.chemical_symbols[j],
+                    chemical_symbols[i],
+                    chemical_symbols[j],
                 )
 
                 cutoff_buffer = bond_cutoff_buffer
@@ -2791,8 +3195,14 @@ class Molecule:
                     self.symbols[i], self.symbols[j], cutoff_buffer
                 )
                 bond_order = self.determine_bond_order_one_bond(
-                    bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
+                    bond_length=distances[i, j], bond_cutoff=cutoff
                 )
+                if (
+                    bond_order == 0
+                    and detect_long_bonds
+                    and self._is_long_bond(i, j, distances[i, j])
+                ):
+                    bond_order = 1.0
                 if bond_order > 0:
                     G.add_edge(i, j, bond_order=bond_order)
         return G
@@ -2876,6 +3286,75 @@ class Molecule:
             X = np.hstack([X, bond_orders])
 
         return X
+
+    @property
+    def soap_descriptors(self):
+        """
+        Return default SOAP descriptors for the molecule.
+        """
+        return self.calculate_soap()
+
+    def calculate_soap(
+        self,
+        *,
+        r_cut=6.0,
+        n_max=8,
+        l_max=6,
+        sigma=1.0,
+        species=None,
+        centers=None,
+        aggregation=None,
+    ):
+        """Compute SOAP descriptors from this molecule's geometry.
+
+        Uses the built-in NumPy/SciPy SOAP implementation (numerically
+        matching DScribe 2.1.2 GTO SOAP). Only finite (non-periodic)
+        molecules are supported; active PBC flags and non-empty translation
+        vectors are rejected.
+
+        Args:
+            r_cut (float): Cutoff radius in Å. Must be greater than 1 Å.
+                Matching DScribe 2.1.2, neighbors within
+                ``r_cut + sigma * sqrt(-2 * ln(1e-3))`` also contribute.
+                Default ``6.0``.
+            n_max (int): Number of radial basis functions. Default ``8``.
+            l_max (int): Maximum angular momentum. Must be in
+                ``0..20``. Default ``6``.
+            sigma (float): Gaussian width in Å (standard deviation). Default
+                ``1.0``.
+            species (sequence of str, optional): Explicit SOAP species
+                basis. When omitted, a sorted unique list of this
+                molecule's elements is used. Pass a shared list for
+                comparable features across a dataset. Symbols are
+                case-normalized (``fe`` → ``Fe``). Channel order is
+                by atomic number (not list order).
+            centers (sequence of int, optional): 1-based atom indices on
+                which to evaluate SOAP. When omitted, all atoms are used.
+                Order is preserved; duplicates overweight aggregations.
+            aggregation (str, optional): ``None`` returns local
+                per-center vectors ``(n_centers, n_features)``.
+                ``"mean"`` / ``"sum"`` average or sum local power spectra
+                post-hoc (outer-average equivalent).
+
+        Returns:
+            numpy.ndarray: Dense ``float64`` SOAP feature array.
+
+        Raises:
+            ValueError: For invalid inputs, active PBC, or translation
+                vectors.
+        """
+        from chemsmart.analysis.soap import calculate_soap
+
+        return calculate_soap(
+            self,
+            r_cut=r_cut,
+            n_max=n_max,
+            l_max=l_max,
+            sigma=sigma,
+            species=species,
+            centers=centers,
+            aggregation=aggregation,
+        )
 
     def vibrationally_displaced(
         self,

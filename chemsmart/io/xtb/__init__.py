@@ -70,6 +70,8 @@ class XTBRefs:
         "cpcmx",  # extended conduction-like polarizable continuum solvation model (CPCM-X)
     ]
 
+    # Solvent/model availability by method: see
+    # https://xtb-docs.readthedocs.io/en/latest/gbsa.html#parameterized-solvents
     XTB_SOLVENT_IDS = [
         "acetone",
         "acetonitrile",
@@ -88,9 +90,9 @@ class XTBRefs:
         "furane",
         "hexadecane",
         "hexane",
-        "h2o",  # Alias for water in GBSA
+        "h2o",
         "methanol",
-        "n-hexane",  # GFN2-xTB only in GBSA
+        "n-hexane",
         "nitromethane",
         "octanol",
         "woctanol",

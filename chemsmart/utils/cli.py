@@ -98,6 +98,12 @@ def _add_subcommand_info_to_ctx(ctx):
     return subcommand
 
 
+def get_selected_server(ctx):
+    """Return the server chosen by ``run``/``sub``, or None to detect one."""
+    jobrunner = (ctx.obj or {}).get("jobrunner")
+    return jobrunner.server if jobrunner is not None else None
+
+
 class MyGroup(click.Group):
     """
     Click Group that records invocation metadata in the context.

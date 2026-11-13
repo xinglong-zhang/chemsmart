@@ -57,11 +57,17 @@ These options are shared across all grouping strategies and must be placed BEFOR
 
    -  -  ``-N, --num-groups``
       -  int
-      -  Target number of groups (adaptive threshold finding)
+      -  Target number of groups using complete-linkage distance levels. Tied linkage levels are not split, so the
+         actual number of groups can be slightly larger than requested.
 
    -  -  ``-np, --num-procs``
+
       -  int
-      -  Number of processors for parallel calculation (default: 1)
+
+      -  Requested processor count (default: 1). Multiprocessing is strategy-dependent: ``rmsd``, ``hrmsd``,
+         ``spyrmsd``, and ``irmsd`` support it; ``pymolrmsd``, ``tfd``, ``tanimoto``, ``energy``, ``formula``,
+         ``connectivity``, and ``isomorphism`` are serial-only. For serial-only strategies, requesting ``num_procs > 1``
+         emits a warning and falls back to ``num_procs=1``.
 
    -  -  ``-ih, --ignore-hydrogens``
       -  flag
@@ -69,7 +75,19 @@ These options are shared across all grouping strategies and must be placed BEFOR
 
    -  -  ``-m, --matrix-format``
       -  string
-      -  Output format for group results (xlsx, csv, txt, default: xyz)
+      -  Output format for group results (xlsx, csv, txt, default: xlsx)
+
+   -  -  ``-r, --representative``
+
+      -  choice
+
+      -  Representative selection strategy (default: ``lowest``): ``lowest`` (all strategies; group ordered by ascending
+         energy, representative is ``group[0]``), ``center`` (matrix-based only; group ordered by increasing mean
+         distance centrality ``C_i = 1/(|G|-1) * sum(D_ij)``, tie-break: centrality, then energy, then original index),
+         ``top3`` (matrix-based only; choose representative from the three lowest-energy members by centrality to the
+         full group, then keep remaining members in ascending energy order; groups with fewer than 3 members fall back
+         to ``lowest``). Non-matrix strategies (``formula``, ``connectivity``, ``isomorphism``) reject ``center`` and
+         ``top3``.
 
    -  -  ``-E, --energy-type``
       -  string
@@ -77,11 +95,11 @@ These options are shared across all grouping strategies and must be placed BEFOR
 
    -  -  ``-csg, --cutoff-entropy-grimme``
       -  float
-      -  Cutoff frequency for entropy (cm⁻¹) using Grimme's qRRHO method (Default: 100)
+      -  Cutoff frequency for entropy (cm⁻¹) using Grimme's qRRHO method (Default: 100, unless ``-cst`` is given)
 
    -  -  ``-cst, --cutoff-entropy-truhlar``
       -  float
-      -  Cutoff frequency for entropy (cm⁻¹) using Truhlar's qRRHO method
+      -  Cutoff frequency for entropy (cm⁻¹) using Truhlar's qRRHO method. Cannot be combined with ``-csg``
 
    -  -  ``-ch, --cutoff-enthalpy``
       -  float
@@ -168,6 +186,12 @@ Fingerprint-based Strategies
    -  -  ``tanimoto``
       -  0.9
       -  Tanimoto similarity with molecular fingerprints
+
+.. note::
+
+   Most ``tanimoto`` fingerprints need RDKit to determine the bonds from the geometry, which often fails for metal
+   complexes and transition states. Structures that fail are left out, and the job fails if none are left. The ``usr``
+   and ``usrcat`` fingerprints do not need this step: ``tanimoto -ft usr``.
 
 Energy-based Strategies
 =======================
@@ -272,7 +296,7 @@ Supported energy types:
 
 **Thermochemistry corrections:**
 
-When using ``qhH``, ``qhG``, or ``sp_qhG``, chemsmart leverages the internal thermochemistry module to compute corrected
+When using ``qhH``, ``qhG``, or ``sp_qhG``, CHEMSMART leverages the internal thermochemistry module to compute corrected
 thermodynamic values. Additional thermochemistry CLI options (e.g., temperature, concentration, frequency cutoffs,
 entropy method) become available.
 
@@ -312,7 +336,10 @@ Group XYZ Files
 
 Each file contains:
 
--  All molecules in that group, sorted by energy (lowest first)
+-  All molecules in that group in representative-defined order (first member is the representative): ``lowest`` keeps
+   energy order, ``center`` keeps centrality order, and ``top3`` keeps representative first with remaining members in
+   energy order
+
 -  Comment line with: Group number, Original_Index, Energy (Hartree)
 
 Example comment line:
@@ -320,6 +347,27 @@ Example comment line:
 .. code:: text
 
    Group 1 Molecule 1 Original_Index: c3 Energy(Hartree): -126.25755080
+
+******************************
+ Submitting to a Compute Node
+******************************
+
+To run the grouping on a compute node, use ``chemsmart sub`` with the same options:
+
+.. code:: bash
+
+   chemsmart sub -s SERVER -n 16 grouper -f conformers.xyz -np 16 rmsd
+   chemsmart sub -s SERVER -n 16 grouper -d . -p gaussian -np 16 -T 0.5 rmsd
+
+No grouping happens when you submit, but the input structures are read so that problems show up straight away. They are
+read again on the compute node. Your ``server.yaml`` needs no extra section, but submit from the Python environment
+where CHEMSMART is installed, because the job uses that same environment.
+
+``-n`` sets the cores requested from the scheduler, and ``-np`` sets how many of them the grouping uses. ``-np``
+defaults to 1 and does not follow ``-n``, so set both.
+
+If the grouping fails, the reason is written to ``<label>.err`` and the command exits with an error, so the scheduler
+reports a submitted job as failed.
 
 ************
  Next Steps

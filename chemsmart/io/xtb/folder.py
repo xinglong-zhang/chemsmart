@@ -61,7 +61,7 @@ class XTBFolder(BaseFolder):
             bool: True if this is a valid xTB calculation directory.
         """
         # First check: must have exactly one xTB output file
-        if self._xtb_out() is None:
+        if self.xtb_out_filepath is None:
             return False
         # Second check: must have at least one common auxiliary file
         for filename in self.XTB_DIRECTORY_MARKERS:
@@ -75,7 +75,8 @@ class XTBFolder(BaseFolder):
         )
         return False
 
-    def _xtb_out(self):
+    @property
+    def xtb_out_filepath(self):
         """
         Return the path to the main XTB output file.
 
@@ -100,52 +101,62 @@ class XTBFolder(BaseFolder):
             )
         return xtbout[0]
 
-    def _xtbopt_log(self):
+    @property
+    def xtbopt_log_filepath(self):
         """Return the path to optimization trajectory log file."""
         xtbopt_log = os.path.join(self.folder, "xtbopt.log")
         return xtbopt_log if os.path.exists(xtbopt_log) else None
 
-    def _charges(self):
+    @property
+    def charges_filepath(self):
         """Return the path to charge file."""
         charge_file = os.path.join(self.folder, "charges")
         return charge_file if os.path.exists(charge_file) else None
 
-    def _energy(self):
+    @property
+    def energy_filepath(self):
         """Return the path to energy file."""
         energy = os.path.join(self.folder, "energy")
         return energy if os.path.exists(energy) else None
 
-    def _engrad(self):
+    @property
+    def engrad_filepath(self):
         """Return the path to engrad file."""
         engrad = self.get_all_files_in_current_folder_by_suffix(".engrad")
         return engrad[0] if engrad else None
 
-    def _g98_out(self):
+    @property
+    def g98_out_filepath(self):
         """Return the path to the GAUSSIAN-format vibrational frequencies file."""
         g98_out = os.path.join(self.folder, "g98.out")
         return g98_out if os.path.exists(g98_out) else None
 
-    def _gradient(self):
+    @property
+    def gradient_filepath(self):
         """Return the path to gradient file."""
         gradient = os.path.join(self.folder, "gradient")
         return gradient if os.path.exists(gradient) else None
 
-    def _hessian(self):
+    @property
+    def hessian_filepath(self):
         """Return the path to hessian file."""
         hessian = os.path.join(self.folder, "hessian")
         return hessian if os.path.exists(hessian) else None
 
-    def _vibspectrum(self):
+    @property
+    def vibspectrum_filepath(self):
         """Return the path to vibrational spectrum file."""
         vibspectrum = os.path.join(self.folder, "vibspectrum")
         return vibspectrum if os.path.exists(vibspectrum) else None
 
-    def _wbo(self):
+    @property
+    def wbo_filepath(self):
         """Return the path to wiberg bond order file."""
         wbo = os.path.join(self.folder, "wbo")
         return wbo if os.path.exists(wbo) else None
 
-    def _input_geometry(self):
+    @property
+    def input_geometry_filepath(self):
         """Return the path to input geometry file used in the XTB calculation."""
         # Try parseable formats first
         for ext in self.PARSEABLE_GEOMETRY_EXTENSIONS:
@@ -173,7 +184,8 @@ class XTBFolder(BaseFolder):
         # No input geometry file found
         return None
 
-    def _xtbopt_geometry(self):
+    @property
+    def xtbopt_geometry_filepath(self):
         """
         Return the path to optimized geometry file (xtbopt.*).
 
@@ -215,7 +227,8 @@ class XTBFolder(BaseFolder):
         # No xtbopt.* file found
         return None
 
-    def _xtbtopo_mol(self):
+    @property
+    def xtbtopo_mol_filepath(self):
         """Return the path to molecular topology file."""
         xtbtopo_mol = os.path.join(self.folder, "xtbtopo.mol")
         return xtbtopo_mol if os.path.exists(xtbtopo_mol) else None
