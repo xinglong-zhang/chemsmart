@@ -4,9 +4,10 @@ from types import SimpleNamespace
 
 import click
 import pytest
+from click.testing import CliRunner
 
 from chemsmart.cli import plugins
-from chemsmart.utils.cli import MyCommand
+from chemsmart.utils.cli import CtxObjArguments, MyGroup
 from chemsmart.utils.mixins import RegistryMixin
 
 
@@ -31,8 +32,8 @@ def shared_plugin(tmp_path, monkeypatch):
     )
     (package / "good.py").write_text(
         "from . import shared\n"
-        "from chemsmart.utils.cli import MyCommand\n"
-        "good = MyCommand('good')\n"
+        "import click\n"
+        "good = click.Command('good')\n"
         "good.chemsmart_classes = (shared.Shared,)\n"
     )
     before = list(RegistryMixin._REGISTRY)
@@ -70,17 +71,17 @@ def test_shared_dependency_survives_failed_plugin(
     bad_source = (
         "from . import shared\n"
         "from chemsmart.utils.mixins import RegistryMixin\n"
-        "from chemsmart.utils.cli import MyCommand\n"
+        "import click\n"
         "class Broken(RegistryMixin):\n"
         "    pass\n"
     )
     if failure == "import":
         bad_source += "raise ImportError('missing optional backend')\n"
     elif failure == "invalid":
-        bad_source += "bad = MyCommand('wrong-name')\n"
+        bad_source += "bad = click.Command('wrong-name')\n"
     else:
         bad_source += (
-            "bad = MyCommand('bad')\n"
+            "bad = click.Command('bad')\n"
             "bad.chemsmart_classes = (shared.Shared, object())\n"
         )
     (package / "bad.py").write_text(bad_source)
@@ -147,7 +148,7 @@ def test_discovery_is_sorted_and_skips_broken(monkeypatch, caplog):
         def load(self):
             if self.broken:
                 raise ImportError("missing dependency")
-            return MyCommand(self.name)
+            return click.Command(self.name)
 
     class Entries:
         def select(self, **kwargs):
@@ -180,7 +181,7 @@ def test_duplicate_plugins_are_all_skipped(monkeypatch):
         plugins.discover(plugins.JOB_COMMANDS, strict=True)
 
 
-def test_job_plugin_requires_recording_command(monkeypatch):
+def test_job_plugin_accepts_plain_click_command(monkeypatch):
     entry = SimpleNamespace(
         name="example",
         value="example:command",
@@ -192,9 +193,180 @@ def test_job_plugin_requires_recording_command(monkeypatch):
         "entry_points",
         lambda: SimpleNamespace(select=lambda **kwargs: [entry]),
     )
-    assert plugins.discover(plugins.JOB_COMMANDS) == ()
-    with pytest.raises(plugins.PluginLoadError, match="MyCommand"):
-        plugins.discover(plugins.JOB_COMMANDS, strict=True)
+    assert plugins.discover(plugins.JOB_COMMANDS)[0].name == "example"
+    assert (
+        plugins.discover(plugins.JOB_COMMANDS, strict=True)[0].name
+        == "example"
+    )
+
+
+def test_host_records_and_replays_nested_job_parameters(tmp_path):
+    calls = []
+
+    @click.group(cls=MyGroup)
+    def sub():
+        pass
+
+    @click.group("example")
+    @click.option("--project", "-p", type=click.Path(resolve_path=True))
+    def example(project):
+        calls.append(project)
+
+    @example.group("example")
+    def nested():
+        pass
+
+    @nested.command()
+    @click.argument("filename")
+    @click.option("--epochs", "steps", type=int)
+    @click.option("--tag", multiple=True)
+    @click.option("--pair", nargs=2, type=int)
+    @click.option("--enabled/--disabled", default=True)
+    @click.option("--fast", "mode", flag_value="fast")
+    @click.option("--slow", "mode", flag_value="slow")
+    @click.option("--truth", type=bool)
+    @click.option("-v", count=True)
+    def train(**values):
+        calls.append(values)
+
+    @sub.result_callback()
+    @click.pass_context
+    def arguments(ctx, result):
+        return CtxObjArguments(
+            ctx.obj["subcommand"], "sub"
+        ).reconstruct_command_line()
+
+    # run/sub share the command: repeated adaptation must not add wrappers.
+    plugins._record_job_command(example)
+    plugins._record_job_command(example)
+    sub.add_command(example)
+    argv = [
+        "example",
+        "-p",
+        str(tmp_path / "project.yaml"),
+        "example",
+        "train",
+        "--epochs",
+        "3",
+        "--tag",
+        "",
+        "--tag",
+        "water",
+        "--pair",
+        "1",
+        "2",
+        "--disabled",
+        "--slow",
+        "--truth",
+        "false",
+        "-vv",
+        "--",
+        "-input.xyz",
+    ]
+    result = CliRunner().invoke(sub, argv, standalone_mode=False)
+    assert result.exit_code == 0, result.output
+    original = list(calls)
+    calls.clear()
+    replay = result.return_value
+    assert replay[:2] == ["sub", "example"]
+    assert "--epochs" in replay and "--steps" not in replay
+    result = CliRunner().invoke(sub, replay[1:], standalone_mode=False)
+    assert result.exit_code == 0, result.output
+    assert calls == original
+
+
+def test_host_records_lazy_plugin_commands():
+    class LazyGroup(click.Group):
+        def get_command(self, ctx, name):
+            return leaf if name == "dynamic" else None
+
+    @click.command("dynamic")
+    @click.option("--value")
+    @click.pass_context
+    def leaf(ctx, value):
+        return CtxObjArguments(
+            ctx.obj["subcommand"]
+        ).reconstruct_command_line()
+
+    command = LazyGroup("lazy")
+    plugins._record_job_command(command)
+    result = CliRunner().invoke(
+        command, ["dynamic", "--value", "x"], standalone_mode=False
+    )
+    assert result.exit_code == 0, result.output
+    assert result.return_value == ["lazy", "dynamic", "--value", "x"]
+
+
+@pytest.mark.parametrize("amount", [None, "4"])
+@pytest.mark.parametrize("disable", [False, True])
+def test_plugin_replay_preserves_callbacks_defaults_and_click_types(
+    tmp_path, monkeypatch, amount, disable
+):
+    from datetime import datetime
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PLUGIN_AMOUNT", raising=False)
+    if amount is not None:
+        monkeypatch.setenv("PLUGIN_AMOUNT", amount)
+    (tmp_path / "input.txt").write_text("contents")
+    calls = []
+
+    def transform(ctx, param, value):
+        ctx.params["derived"] = "from callback"
+        return value * 2
+
+    @click.command()
+    @click.option(
+        "--amount",
+        type=int,
+        callback=transform,
+        default=lambda: 3,
+        envvar="PLUGIN_AMOUNT",
+    )
+    @click.option("--date", type=click.DateTime(["%Y-%m-%d"]))
+    @click.option(
+        "--other-date",
+        type=click.DateTime(["%Y-%m-%d"]),
+        default=datetime(2026, 1, 1),
+    )
+    @click.option("--input", type=click.File())
+    @click.option("--disable", is_flag=True, default=True)
+    @click.option("--tag", is_flag=True, multiple=True)
+    @click.option("--red", "colors", flag_value="red", multiple=True)
+    @click.option("--blue", "colors", flag_value="blue", multiple=True)
+    @click.pass_context
+    def example(ctx, **values):
+        values["input"] = values["input"].read()
+        calls.append(values)
+        return CtxObjArguments(
+            ctx.obj["subcommand"]
+        ).reconstruct_command_line()
+
+    plugins._record_job_command(example)
+    argv = [
+        "--date",
+        "2026-11-13",
+        "--input",
+        "input.txt",
+        "--tag",
+        "--tag",
+        "--blue",
+        "--red",
+        "--blue",
+    ]
+    if disable:
+        argv.append("--disable")
+    result = CliRunner().invoke(example, argv, standalone_mode=False)
+    assert result.exit_code == 0, result.output
+    replay = result.return_value
+    assert str(tmp_path / "input.txt") in replay
+    result = CliRunner().invoke(example, replay[1:], standalone_mode=False)
+    assert result.exit_code == 0, result.output
+    assert calls[0] == calls[1]
+    assert calls[0]["amount"] == (8 if amount else 6)
+    assert calls[0]["disable"] is not disable
+    assert calls[0]["tag"] == (True, True)
+    assert calls[0]["colors"] == ("blue", "red", "blue")
 
 
 def test_reserved_plugin_is_not_loaded(monkeypatch):

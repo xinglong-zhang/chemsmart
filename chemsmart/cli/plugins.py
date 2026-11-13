@@ -5,12 +5,12 @@ from __future__ import annotations
 import importlib.metadata
 import logging
 from collections import Counter
-from functools import lru_cache
+from functools import lru_cache, wraps
 from typing import Iterable
 
 import click
 
-from chemsmart.utils.cli import MyCommand, MyGroup
+from chemsmart.utils.cli import _add_subcommand_info_to_ctx
 from chemsmart.utils.mixins import RegistryMixin
 
 logger = logging.getLogger(__name__)
@@ -23,15 +23,61 @@ class PluginLoadError(RuntimeError):
     """Raised when a plugin cannot be loaded or validated."""
 
 
-def _validate_job_command(command):
-    """Ensure every job command records arguments for submission scripts."""
+def _record_job_command(command):
+    """Record ordinary Click invocations without replacing plugin classes."""
+    if getattr(command, "_chemsmart_records_invocation", False):
+        return command
+    invoke = command.invoke
+    get_params = command.get_params
+
+    @wraps(get_params)
+    def recording_get_params(ctx):
+        params = get_params(ctx)
+        for param in params:
+            _record_parameter_value(param)
+        return params
+
+    command.get_params = recording_get_params
+
+    @wraps(invoke)
+    def record_and_invoke(ctx):
+        record = _add_subcommand_info_to_ctx(ctx)
+        record["parameters"] = tuple(ctx.command.get_params(ctx))
+        record["raw_values"] = getattr(ctx, "_chemsmart_raw_values", {})
+        return invoke(ctx)
+
+    command.invoke = record_and_invoke
     if isinstance(command, click.Group):
-        if not isinstance(command, MyGroup):
-            raise PluginLoadError("Job command groups must use MyGroup.")
-        for child in command.commands.values():
-            _validate_job_command(child)
-    elif not isinstance(command, MyCommand):
-        raise PluginLoadError("Job commands must use MyCommand.")
+        get_command = command.get_command
+
+        @wraps(get_command)
+        def recording_get_command(ctx, name):
+            child = get_command(ctx, name)
+            return _record_job_command(child) if child is not None else None
+
+        # Intercept lookup so lazy and dynamically added children also work.
+        command.get_command = recording_get_command
+    command._chemsmart_records_invocation = True
+    return command
+
+
+def _record_parameter_value(param):
+    """Capture resolved defaults/env values before conversion or callbacks."""
+    if getattr(param, "_chemsmart_records_value", False):
+        return
+    process_value = param.process_value
+
+    @wraps(process_value)
+    def record_and_process(ctx, value):
+        if not hasattr(ctx, "_chemsmart_raw_values"):
+            ctx._chemsmart_raw_values = {}
+        # Copy parser-owned sequences: callbacks may mutate their input.
+        raw = tuple(value) if isinstance(value, (list, tuple)) else value
+        ctx._chemsmart_raw_values[param.name] = raw
+        return process_value(ctx, value)
+
+    param.process_value = record_and_process
+    param._chemsmart_records_value = True
 
 
 def _provider(entry_point: importlib.metadata.EntryPoint) -> str:
@@ -95,9 +141,9 @@ def discover(
                     f"{group} entry point {_provider(entry)} has name "
                     f"{entry.name!r}, but command.name is {command.name!r}."
                 )
-            if group == JOB_COMMANDS:
-                _validate_job_command(command)
             classes = _declared_classes(command)
+            if group == JOB_COMMANDS:
+                _record_job_command(command)
             for cls in classes:
                 if cls not in RegistryMixin._REGISTRY:
                     RegistryMixin._REGISTRY.append(cls)

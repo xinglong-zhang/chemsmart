@@ -16,9 +16,17 @@ reporting commands in ``chemsmart.commands``:
 Each entry point must expose a Click command or group, and its entry-point
 name must match ``command.name``. Job commands are available under both
 ``chemsmart run`` and ``chemsmart sub``.
-Job command groups must use ``chemsmart.utils.cli.MyGroup`` and leaf
-commands must use ``chemsmart.utils.cli.MyCommand``, including nested
-commands. These classes record arguments for submission scripts.
+Job plugins use ordinary Click commands and groups. The host records their
+invocations and input parameter values for submission scripts, including nested or
+lazy commands. Use ordinary Click command classes in plugins; the host owns
+argument recording. ``MyGroup`` and ``MyCommand`` are used by core commands
+and are not part of the plugin contract.
+Option spellings, positional arguments, repeated options, and flags are
+reconstructed from the Click parameter definitions.
+Values are captured before type conversion and callbacks, so replay does not
+apply a callback's transformation twice. Resolved defaults and environment
+values are included; file inputs and paths with ``resolve_path=True`` are
+made absolute for execution on compute nodes.
 
 In normal mode, duplicate plugin names are all skipped, and plugins colliding
 with built-in commands are skipped. Broken plugins are also skipped. Each
@@ -43,14 +51,16 @@ command. For example, in a separate plugin package:
 .. code-block:: python
 
    import click
-   from chemsmart.utils.cli import MyGroup
    from .jobs import ExampleJob, ExampleJobRunner, ExampleExecutable
 
-   @click.group(cls=MyGroup)
+   @click.group()
    def example():
        pass
 
-   # Define the job subcommands here, using cls=MyCommand.
+   @example.command()
+   def train():
+       return ExampleJob()
+
    example.chemsmart_classes = (
        ExampleJob, ExampleJobRunner, ExampleExecutable,
    )
@@ -59,6 +69,9 @@ command. For example, in a separate plugin package:
 Omit it for commands that introduce no runtime classes. Attach the declaration
 to the root entry-point command, including classes needed by nested commands.
 This also works for shared classes already imported by another plugin.
+Job commands return a host ``Job`` (or a list of jobs), and declare the job,
+runner and executable adapters they introduce. The host owns parameter
+recording, scheduling, and script generation; the plugin owns its domain logic.
 
 During discovery, external classes do not automatically enter CHEMSMART's
 registry. The host validates the command and the entire declaration before
