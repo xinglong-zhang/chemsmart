@@ -17,7 +17,7 @@ Dependencies:
 
 Configuration Structure:
     ~/.chemsmart/
-    ├── usersettings.yaml
+    ├── usersettings.yaml  (including optional CCDC environment mapping)
     ├── server/
     │   └── server.yaml
     ├── gaussian/
@@ -26,10 +26,8 @@ Configuration Structure:
     │   └── orca_project_settings.yaml
     ├── xtb/
     │   └── xtb_project_settings.yaml
-    ├── crest/
-    │   └── crest_project_settings.yaml
-    └── ccdc/
-        └── ccdc.yaml
+    └── crest/
+        └── crest_project_settings.yaml
 """
 
 import glob
@@ -195,27 +193,21 @@ class CHEMSMARTUserSettings:
         """
         return os.path.join(self.config_dir, "crest")
 
-    @property
-    def user_ccdc_settings_dir(self):
+    @cached_property
+    def ccdc_envars(self):
         """
-        Get the user CCDC/CSD settings directory.
+        Get CSD/CCDC environment variables from ``usersettings.yaml``.
+
+        The optional top-level ``CCDC`` mapping in the main user settings
+        file contains environment variables required by the licensed CSD
+        Python API (``ccdc`` package), e.g., ``CSDHOME`` and
+        ``CCDC_MOGUL_DATA``.
 
         Returns:
-            str: Path to the directory containing CSD Python API settings.
+            dict: Mapping of CSD environment variable names to values;
+                  empty dict if no ``CCDC`` section is configured.
         """
-        return os.path.join(self.config_dir, "ccdc")
-
-    @property
-    def user_ccdc_yaml(self):
-        """
-        Get the path to the CSD/CCDC environment variables YAML file.
-
-        Returns:
-            str: Path to the YAML file containing environment variables
-                 required by the licensed CSD Python API (``ccdc``
-                 package), e.g., ``CSDHOME``, ``CCDC_MOGUL_DATA``.
-        """
-        return os.path.join(self.user_ccdc_settings_dir, "ccdc.yaml")
+        return self.data.get("CCDC", {}) or {}
 
     @cached_property
     def server_yaml_files(self):

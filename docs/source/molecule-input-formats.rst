@@ -456,22 +456,23 @@ in the Python environment running CHEMSMART:
 #. Depending on the installation, environment variables may be required so that the API can locate
    the CSD data and files (see the `CSD Python API installation notes
    <https://downloads.ccdc.cam.ac.uk/documentation/API/installation_notes.html>`_). Run ``chemsmart
-   config ccdc`` to copy the bundled template to ``~/.chemsmart/ccdc/ccdc.yaml`` (optionally setting
-   ``CSDHOME`` via ``chemsmart config ccdc --folder <CCDC_SOFTWARE_FOLDER>``), then adapt the paths
-   to your local CSD installation:
+   config ccdc`` to create ``~/.chemsmart/usersettings.yaml`` from the bundled template if needed
+   (optionally setting ``CSDHOME`` via ``chemsmart config ccdc --folder <CCDC_SOFTWARE_FOLDER>``),
+   then edit the ``CCDC`` mapping and adapt the paths to your local CSD installation:
 
 .. code:: yaml
 
-   # ~/.chemsmart/ccdc/ccdc.yaml
-   CSDHOME: /home/user/CCDC/ccdc-software
-   CCDC_MOGUL_DATA: /home/user/CCDC/ccdc-data/mogul
-   CCDC_ISOSTAR_DATA_DIRECTORY: /home/user/CCDC/ccdc-data/isostar
-   # ... other CSD variables as needed
+   # ~/.chemsmart/usersettings.yaml
+   CCDC:
+     CSDHOME: /home/user/CCDC/ccdc-software
+     CCDC_MOGUL_DATA: /home/user/CCDC/ccdc-data/mogul
+     CCDC_ISOSTAR_DATA_DIRECTORY: /home/user/CCDC/ccdc-data/isostar
+     # ... other CSD variables as needed
 
-CHEMSMART loads this file and exports the variables into the environment before importing the
+CHEMSMART loads this mapping and exports the variables into the environment before importing the
 ``ccdc`` package; variables already set in the shell take precedence and are not overwritten. If the
 CSD Python API is not installed or not activated, CHEMSMART issues a warning explaining the
-requirement and falls back to the HTTP route.
+requirement and reminding you to configure the ``CCDC`` section, then falls back to the HTTP route.
 
 .. tip::
 

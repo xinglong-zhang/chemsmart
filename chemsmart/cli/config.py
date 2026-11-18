@@ -79,9 +79,9 @@ class Config:
         return self.chemsmart_dest / "orca"
 
     @property
-    def chemsmart_ccdc(self):
-        """Path to the ``ccdc`` sub-directory of the user config."""
-        return self.chemsmart_dest / "ccdc"
+    def chemsmart_usersettings(self):
+        """Path to the main ``usersettings.yaml`` user configuration."""
+        return self.chemsmart_dest / "usersettings.yaml"
 
     @property
     def chemsmart_package_path(self):
@@ -637,10 +637,9 @@ def ccdc(ctx, folder):
     """
     Configure the environment for the licensed CSD Python API.
 
-    Copies the bundled ccdc.yaml template to
-    ~/.chemsmart/ccdc/ccdc.yaml if the file does not exist yet.
-    If --folder is given, sets CSDHOME to the specified CCDC software
-    installation folder in that file.
+    Creates ~/.chemsmart/usersettings.yaml from the bundled template if
+    it does not exist yet. If --folder is given, sets CSDHOME in the
+    CCDC mapping of that file.
 
     Note that using CCDC deposition numbers additionally requires the
     csd-python-api package to be installed in the Python environment
@@ -651,17 +650,16 @@ def ccdc(ctx, folder):
         chemsmart config ccdc --folder <CCDC_SOFTWARE_FOLDER>
     """
     cfg = ctx.obj["cfg"]
-    ccdc_dir = cfg.chemsmart_ccdc
-    ccdc_yaml = ccdc_dir / "ccdc.yaml"
+    usersettings = cfg.chemsmart_usersettings
 
-    if not ccdc_yaml.exists():
-        ccdc_dir.mkdir(parents=True, exist_ok=True)
-        template = cfg.chemsmart_template / "ccdc" / "ccdc.yaml"
+    if not usersettings.exists():
+        cfg.chemsmart_dest.mkdir(parents=True, exist_ok=True)
+        template = cfg.chemsmart_template / "usersettings.yaml"
         with resources.as_file(template) as src:
-            shutil.copy(src, ccdc_yaml)
-        logger.info(f"Copied CSD environment template to {ccdc_yaml}")
+            shutil.copy(src, usersettings)
+        logger.info(f"Copied user settings template to {usersettings}")
     else:
-        logger.info(f"CSD environment file already exists: {ccdc_yaml}")
+        logger.info(f"User settings file already exists: {usersettings}")
 
     if folder is not None:
         csdhome = os.path.expanduser(folder)
@@ -669,28 +667,40 @@ def ccdc(ctx, folder):
             os.path.abspath(csdhome)
         ), f"CCDC software folder not found: {csdhome}"
         logger.info(f"Configuring CSDHOME with folder: {folder}")
-        text = ccdc_yaml.read_text()
-        if re.search(r"^#?CSDHOME:.*$", text, flags=re.MULTILINE):
-            # replace the first placeholder or existing CSDHOME line
-            # (lambda replacement: folder may contain backslashes;
-            # count=1 keeps the commented platform examples intact)
-            text = re.sub(
-                r"^#?CSDHOME:.*$",
-                lambda m: f"CSDHOME: '{folder}'",
-                text,
-                count=1,
-                flags=re.MULTILINE,
-            )
-            ccdc_yaml.write_text(text)
+        csdhome_line = f"  CSDHOME: '{folder}'"
+        text = usersettings.read_text()
+        if re.search(r"^CCDC:\s*(?:#.*)?$", text, flags=re.MULTILINE):
+            if re.search(r"^\s+CSDHOME:.*$", text, flags=re.MULTILINE):
+                # Update the existing value in the active CCDC mapping.
+                text = re.sub(
+                    r"^\s+CSDHOME:.*$",
+                    lambda m: csdhome_line,
+                    text,
+                    count=1,
+                    flags=re.MULTILINE,
+                )
+            else:
+                # Insert CSDHOME directly below the CCDC mapping key.
+                text = re.sub(
+                    r"^CCDC:\s*(?:#.*)?$",
+                    lambda m: f"CCDC:\n{csdhome_line}",
+                    text,
+                    count=1,
+                    flags=re.MULTILINE,
+                )
+            usersettings.write_text(text)
         else:
-            with open(ccdc_yaml, "a") as f:
-                f.write(f"\nCSDHOME: '{folder}'\n")
+            # No active CCDC mapping yet; append one without modifying
+            # the user's other settings or the commented examples.
+            with open(usersettings, "a") as f:
+                f.write(f"\nCCDC:\n{csdhome_line}\n")
 
     logger.info(
-        "Using CCDC deposition numbers additionally requires the "
-        "*licensed* CSD Python API (csd-python-api) to be installed in "
-        "the Python environment running CHEMSMART, and an activated "
-        "CSD licence; see https://downloads.ccdc.cam.ac.uk/"
+        "To use CCDC deposition numbers, install and activate the "
+        "*licensed* CSD Python API (csd-python-api) in the Python "
+        "environment running CHEMSMART. If your CSD installation needs "
+        "environment variables, edit the CCDC section in "
+        f"{usersettings}; see https://downloads.ccdc.cam.ac.uk/"
         "documentation/API/installation_notes.html"
     )
 

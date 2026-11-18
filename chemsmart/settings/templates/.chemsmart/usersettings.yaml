@@ -1,3 +1,41 @@
 ##PROJECT: 1234567  # alias ACCOUNT FOR SLURM
 ##SCRATCH: /scratch/abc/1234567  # SCRATCH DIRECTORY
 EMAIL: abc@gmail.com
+
+# =============================================================================
+# CSD / CCDC environment variables for the CSD Python API
+#
+# Using `Molecule.from_ccdc()` or the CLI option `-CC/--ccdc` requires the
+# *licensed* CSD Python API (the `ccdc` package, csd-python-api) to be
+# installed in the Python environment running CHEMSMART.
+#
+# Depending on how the CSD is installed, a number of environment variables
+# must be set so that the API can locate the CSD data and files, see:
+# https://downloads.ccdc.cam.ac.uk/documentation/API/installation_notes.html
+#
+# To use this section:
+#   1. Uncomment the CCDC mapping below
+#   2. Adapt the paths to your local CSD installation
+#   3. Uncomment only the variables you need
+#
+# CHEMSMART reads this mapping and exports the variables into the environment
+# before importing the `ccdc` package. Variables that are already set in the
+# shell environment are NOT overwritten. Values may contain ~ (home directory)
+# and $VARIABLES, which are expanded when the settings are loaded.
+# =============================================================================
+
+#CCDC:
+#  CSDHOME: /home/user/CCDC/ccdc-software
+#  CCDC_ISOSTAR_DATA_DIRECTORY: /home/user/CCDC/ccdc-data/isostar
+#  CCDC_MOGUL_DATA: /home/user/CCDC/ccdc-data/mogul
+#  CCDC_MOGUL_INITIALISATION_FILE: $PYTHONHOME/lib/python3.9/site-packages/ccdc/parameter_files/mogul.ini
+#  CCDC_CROSSMINER_DATABASE: /home/user/CCDC/ccdc-data/crossminer/csd_pdb_crossminer.feat
+#  CCDC_CROSSMINER_FEATURE_DEFINITIONS: /home/user/CCDC/ccdc-data/crossminer/feature_definitions
+#  GOLD_DIR: /home/user/CCDC/ccdc-software/gold/GOLD
+
+# On Windows, quote values containing backslashes or spaces, e.g.:
+#  CSDHOME: 'C:\Program Files\CCDC'
+#  CCDC_MOGUL_DATA: 'C:\ProgramData\CCDC\ccdc-data\mogul'
+
+# On macOS, CSDHOME typically looks like:
+#  CSDHOME: /Applications/CCDC

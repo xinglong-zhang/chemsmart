@@ -16,10 +16,10 @@ Two retrieval routes are supported, tried in order:
    installation, environment variables pointing to the CSD data and
    software may be needed (see the CSD Python API installation notes:
    https://downloads.ccdc.cam.ac.uk/documentation/API/installation_notes.html).
-   These can be provided to CHEMSMART in the file
-   ``~/.chemsmart/ccdc/ccdc.yaml`` (a template is shipped in
-   ``chemsmart/settings/templates/.chemsmart/ccdc/ccdc.yaml``); the
-   variables are exported into the environment before the ``ccdc``
+   These can be provided to CHEMSMART in the ``CCDC`` mapping of
+   ``~/.chemsmart/usersettings.yaml`` (a commented template is shipped
+   in ``chemsmart/settings/templates/.chemsmart/usersettings.yaml``);
+   the variables are exported into the environment before the ``ccdc``
    package is imported.
 2. HTTP download (fallback): otherwise the CIF file is downloaded from
    the CCDC web service (base URL configurable via the ``CCDC_BASE_URL``
@@ -65,9 +65,9 @@ CSD_API_UNAVAILABLE_HINT = (
     "*licensed* CSD Python API: (1) install csd-python-api in the Python "
     "environment running CHEMSMART, (2) activate your CSD licence with "
     "the CCDC Software Activation tool, and (3) if your installation "
-    "needs them, set the CSD environment variables in "
-    "~/.chemsmart/ccdc/ccdc.yaml (run `chemsmart config ccdc` to set up "
-    "this file from the bundled template, and see "
+    "needs them, set the CSD environment variables in the CCDC section "
+    "of ~/.chemsmart/usersettings.yaml (run `chemsmart config ccdc` to "
+    "set up this section, and see "
     "https://downloads.ccdc.cam.ac.uk/documentation/API/installation_notes.html). "
     "Falling back to downloading the CIF file from the CCDC web service, "
     "which returns the crystallographic asymmetric unit rather than "
@@ -110,13 +110,13 @@ def validate_deposition_number(deposition_number):
     return dep_num
 
 
-def configure_csd_environment(yaml_file=None):
+def configure_csd_environment(envars=None):
     """
     Configure environment variables required by the CSD Python API.
 
-    Reads environment variable definitions (a flat ``KEY: value``
-    mapping) from the CHEMSMART user configuration file
-    ``~/.chemsmart/ccdc/ccdc.yaml`` and exports them into the process
+    Reads environment variable definitions from the optional ``CCDC``
+    mapping in the CHEMSMART user configuration file
+    ``~/.chemsmart/usersettings.yaml`` and exports them into the process
     environment, so that the licensed CSD Python API (``ccdc`` package)
     can locate the CSD data and software. Values may contain ``~`` and
     ``$VARIABLES``, which are expanded. Variables that are already
@@ -124,44 +124,34 @@ def configure_csd_environment(yaml_file=None):
     overwritten.
 
     Args:
-        yaml_file (str, optional): Path to the environment variables
-            YAML file. If None, the default CHEMSMART user configuration
-            file ``~/.chemsmart/ccdc/ccdc.yaml`` is used.
+        envars (dict, optional): Mapping of CSD environment variable
+            names to values. If None, the ``CCDC`` mapping is read from
+            ``~/.chemsmart/usersettings.yaml`` via
+            :class:`chemsmart.settings.user.CHEMSMARTUserSettings`.
 
     Returns:
-        dict: Mapping of environment variables defined in the file
-            (empty dict if the file does not exist or defines nothing).
+        dict: Mapping of configured environment variables (empty dict
+            if no ``CCDC`` section is configured).
 
     Raises:
-        ValueError: If the YAML file does not contain a flat mapping of
+        ValueError: If the ``CCDC`` section is not a flat mapping of
             variable names to values.
     """
-    import yaml
-
-    if yaml_file is None:
+    if envars is None:
         from chemsmart.settings.user import CHEMSMARTUserSettings
 
-        yaml_file = CHEMSMARTUserSettings().user_ccdc_yaml
+        envars = CHEMSMARTUserSettings().ccdc_envars
 
-    if not os.path.exists(yaml_file):
-        logger.debug(
-            f"No CSD environment file found at {yaml_file}; "
-            "using the current shell environment for the CSD Python API."
-        )
-        return {}
-
-    with open(yaml_file) as f:
-        data = yaml.safe_load(f) or {}
-
-    if not isinstance(data, dict):
+    if not isinstance(envars, dict):
         raise ValueError(
-            f"Invalid CSD environment file {yaml_file}: expected a YAML "
-            "mapping of environment variable names to values, e.g. "
-            "'CSDHOME: /path/to/ccdc-software'."
+            "Invalid CSD environment configuration in "
+            "~/.chemsmart/usersettings.yaml: expected the CCDC section "
+            "to be a mapping of environment variable names to values, "
+            "e.g. 'CCDC: {CSDHOME: /path/to/ccdc-software}'."
         )
 
     env = {}
-    for key, value in data.items():
+    for key, value in envars.items():
         if value is None:
             continue
         # expand ~ and $VARIABLES in the value
@@ -172,15 +162,21 @@ def configure_csd_environment(yaml_file=None):
             logger.debug(
                 f"Environment variable {key} is already set to "
                 f"{os.environ[key]}; not overwriting with value "
-                f"{value} from {yaml_file}."
+                f"{value} from ~/.chemsmart/usersettings.yaml."
             )
         else:
             os.environ[key] = value
 
     if env:
         logger.info(
-            f"Loaded {len(env)} CSD environment variable(s) "
-            f"from {yaml_file}: {sorted(env)}"
+            f"Loaded {len(env)} CSD environment variable(s) from "
+            f"~/.chemsmart/usersettings.yaml: {sorted(env)}"
+        )
+    else:
+        logger.debug(
+            "No CSD environment variables configured in the CCDC "
+            "section of ~/.chemsmart/usersettings.yaml; using the "
+            "current shell environment for the CSD Python API."
         )
     return env
 
@@ -190,8 +186,8 @@ def csd_api_available():
     Check whether the local CSD Python API is installed and licensed.
 
     Environment variables from the CHEMSMART user configuration
-    (``~/.chemsmart/ccdc/ccdc.yaml``) are loaded before the check, see
-    :func:`configure_csd_environment`.
+    (the ``CCDC`` mapping in ``~/.chemsmart/usersettings.yaml``) are
+    loaded before the check, see :func:`configure_csd_environment`.
 
     Returns:
         bool: True if the ``ccdc`` package can be imported and its
