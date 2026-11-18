@@ -18,6 +18,10 @@ EMAIL: abc@gmail.com
 #   2. Adapt the paths to your local CSD installation
 #   3. Uncomment only the variables you need
 #
+# The six CCDC_* / GOLD_DIR variables below follow the official CSD Python
+# API installation notes. CSDHOME is an optional software-root setting and
+# can be configured with `chemsmart config ccdc --folder <folder>`.
+#
 # CHEMSMART reads this mapping and exports the variables into the environment
 # before importing the `ccdc` package. Variables that are already set in the
 # shell environment are NOT overwritten. Values may contain ~ (home directory)

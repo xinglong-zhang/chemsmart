@@ -456,23 +456,40 @@ in the Python environment running CHEMSMART:
 #. Depending on the installation, environment variables may be required so that the API can locate
    the CSD data and files (see the `CSD Python API installation notes
    <https://downloads.ccdc.cam.ac.uk/documentation/API/installation_notes.html>`_). Run ``chemsmart
-   config ccdc`` to create ``~/.chemsmart/usersettings.yaml`` from the bundled template if needed
-   (optionally setting ``CSDHOME`` via ``chemsmart config ccdc --folder <CCDC_SOFTWARE_FOLDER>``),
-   then edit the ``CCDC`` mapping and adapt the paths to your local CSD installation:
+   config ccdc`` to create ``~/.chemsmart/usersettings.yaml`` from the bundled template if needed,
+   then edit the ``CCDC`` mapping and adapt the paths to your local CSD installation. The official
+   installation notes list the following six variables; configure only those required by your
+   installation:
 
 .. code:: yaml
 
    # ~/.chemsmart/usersettings.yaml
    CCDC:
-     CSDHOME: /home/user/CCDC/ccdc-software
-     CCDC_MOGUL_DATA: /home/user/CCDC/ccdc-data/mogul
      CCDC_ISOSTAR_DATA_DIRECTORY: /home/user/CCDC/ccdc-data/isostar
-     # ... other CSD variables as needed
+     CCDC_MOGUL_DATA: /home/user/CCDC/ccdc-data/mogul
+     CCDC_MOGUL_INITIALISATION_FILE: $PYTHONHOME/lib/python3.10/site-packages/ccdc/parameter_files/mogul.ini
+     CCDC_CROSSMINER_DATABASE: /home/user/CCDC/ccdc-data/crossminer/csd_pdb_crossminer.feat
+     CCDC_CROSSMINER_FEATURE_DEFINITIONS: /home/user/CCDC/ccdc-data/crossminer/feature_definitions
+     GOLD_DIR: /home/user/CCDC/ccdc-software/gold/GOLD
+
+If your installation also uses ``CSDHOME`` for the CCDC software root, it can be set with
+``chemsmart config ccdc --folder <CCDC_SOFTWARE_FOLDER>`` or added to the same ``CCDC`` mapping.
 
 CHEMSMART loads this mapping and exports the variables into the environment before importing the
 ``ccdc`` package; variables already set in the shell take precedence and are not overwritten. If the
 CSD Python API is not installed or not activated, CHEMSMART issues a warning explaining the
 requirement and reminding you to configure the ``CCDC`` section, then falls back to the HTTP route.
+
+.. warning::
+
+   **Version compatibility:** match ``csd-python-api`` with both the Python version and the other
+   packages in the environment. The CCDC conda packages for csd-python-api 3.7.2 and 3.8.x require
+   ``scipy<1.15`` and ``scikit-learn<1.6``, whereas CHEMSMART currently pins ``scipy==1.15.2`` and
+   ``scikit-learn>=1.6.1``. The scipy constraint can be resolved with scipy 1.14.1, but there is no
+   scikit-learn version satisfying both constraints. Downgrading csd-python-api to 3.7.2 therefore
+   does **not** resolve the scikit-learn conflict. Check the dependencies before installing the CSD
+   Python API into an existing CHEMSMART environment; use a separate environment or adjust the
+   version pins only after testing the affected functionality.
 
 .. tip::
 
