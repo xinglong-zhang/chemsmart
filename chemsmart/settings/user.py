@@ -17,7 +17,7 @@ Dependencies:
 
 Configuration Structure:
     ~/.chemsmart/
-    ├── usersettings.yaml
+    ├── usersettings.yaml  (including optional CCDC environment mapping)
     ├── server/
     │   └── server.yaml
     ├── gaussian/
@@ -192,6 +192,22 @@ class CHEMSMARTUserSettings:
             str: Path to the directory containing CREST-specific settings.
         """
         return os.path.join(self.config_dir, "crest")
+
+    @cached_property
+    def ccdc_envars(self):
+        """
+        Get CSD/CCDC environment variables from ``usersettings.yaml``.
+
+        The optional top-level ``CCDC`` mapping in the main user settings
+        file contains environment variables required by the licensed CSD
+        Python API (``ccdc`` package), e.g., ``CSDHOME`` and
+        ``CCDC_MOGUL_DATA``.
+
+        Returns:
+            dict: Mapping of CSD environment variable names to values;
+                  empty dict if no ``CCDC`` section is configured.
+        """
+        return self.data.get("CCDC", {}) or {}
 
     @cached_property
     def server_yaml_files(self):
