@@ -338,6 +338,8 @@ def get_list_from_string_range(string_of_range, *, max_index=None):
                 start, end = int(start_s), int(end_s)
             else:
                 start = end = int(token)
+            if max_index is None and (start < 1 or start > end):
+                raise ValueError
         except ValueError:
             raise ValueError(
                 f"Invalid atom index token {token!r} in {original!r}. "
@@ -347,10 +349,6 @@ def get_list_from_string_range(string_of_range, *, max_index=None):
             raise ValueError(
                 f"Invalid atom index token {token!r}. "
                 f"The range start {start} exceeds its end {end}."
-            )
-        if max_index is None and start < 1:
-            raise ValueError(
-                f"Invalid atom index token {token!r}. Atom indices start at 1."
             )
         if max_index is not None and (start < 1 or end > max_index):
             raise ValueError(

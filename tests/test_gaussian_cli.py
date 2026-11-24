@@ -3283,6 +3283,50 @@ def test_frag_submission_reports_invalid_structure_index(
 
 
 @pytest.mark.usefixtures("chemsmart_templates_config")
+def test_frag_submission_reuses_linked_modred_input(
+    fragment_input,
+    tmp_path,
+    monkeypatch,
+    server_yaml_file,
+    gaussian_yaml_settings_gas_solv_project_name,
+    mocker,
+):
+    monkeypatch.chdir(tmp_path)
+    fragment_input.write_text(
+        fragment_input.read_text() + "--Link1--\n%chk=fragments.chk\n"
+        "# stable=opt umn15/def2svp geom=check guess=read\n\n"
+        "Stability check\n\n0 1\n\n"
+        "--Link1--\n%chk=fragments.chk\n"
+        "# opt=modredundant umn15/def2svp geom=check guess=read\n\n"
+        "Constrained optimization\n\n0 1\n\nB 1 2 F\n\n"
+    )
+    result = submit_for_test(
+        server_yaml_file,
+        "gaussian",
+        "-p",
+        gaussian_yaml_settings_gas_solv_project_name,
+        "-f",
+        fragment_input,
+        "frag",
+        "-j",
+        "modred",
+        "-c",
+        "[[2,1]]",
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    (script,) = tmp_path.glob("chemsmart_run_*.py")
+    run_job = mocker.patch.object(GaussianFragJob, "run", autospec=True)
+    node = run_generated_script_command(script)
+    assert node.exit_code == 0, (node.output, node.exception)
+    run_job.assert_called_once()
+    settings = run_job.call_args.args[0].settings
+    assert settings.charge == 0
+    assert settings.multiplicity == 1
+    assert settings.fragment_multiplicities == [2, -2]
+    assert settings.modred == [[2, 1]]
+
+
+@pytest.mark.usefixtures("chemsmart_templates_config")
 @pytest.mark.parametrize(
     "label_options,expected_label,stable_options,expected_stable",
     [
