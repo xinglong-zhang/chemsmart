@@ -128,6 +128,19 @@ class GaussianInputWriter(InputWriter):
             values.extend([charge, multiplicity])
         f.write(" ".join(map(str, values)) + "\n")
 
+    def _write_fragment_coordinates(self, f, fragment_ids):
+        """Write the coordinate block for the fragment guess."""
+        molecule = self.job.molecule
+        frozen_atoms = molecule.frozen_atoms
+        for index, (symbol, fragment, (x, y, z)) in enumerate(
+            zip(molecule.chemical_symbols, fragment_ids, molecule.positions)
+        ):
+            label = f"{symbol}(Fragment={fragment})"
+            if frozen_atoms is not None and len(frozen_atoms):
+                label += f" {frozen_atoms[index]:5}"
+            f.write(f"{label} {x:15.10f} {y:15.10f} {z:15.10f}\n")
+        f.write("\n")
+
     def _write_calculation(
         self, f, fragment_settings=None, read_geometry=False
     ):
@@ -146,12 +159,7 @@ class GaussianInputWriter(InputWriter):
         if read_geometry:
             f.write("\n")
         elif fragment_settings is not None:
-            self.job.molecule.write_coordinates(
-                f,
-                program="gaussian",
-                fragment_ids=fragment_settings.fragment_ids,
-            )
-            f.write("\n")
+            self._write_fragment_coordinates(f, fragment_settings.fragment_ids)
         else:
             self._write_cartesian_coordinates(f)
         if isinstance(self.settings, GaussianQMMMJobSettings):

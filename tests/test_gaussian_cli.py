@@ -3309,6 +3309,11 @@ def test_sub_preserves_frag_options_and_label(
     expected_stable,
 ):
     monkeypatch.chdir(tmp_path)
+    fragment_input.write_text(
+        fragment_input.read_text().replace(
+            "H(Fragment=2) 0.0", "H(Fragment=2) -1 0.0"
+        )
+    )
     result = submit_for_test(
         server_yaml_file,
         "gaussian",
@@ -3335,6 +3340,7 @@ def test_sub_preserves_frag_options_and_label(
     assert scripts[0].stem == f"chemsmart_run_{job.execution_name}"
     assert job.settings.stable == expected_stable
     assert job.settings.fragment_multiplicities == [2, -2]
+    assert job.molecule.frozen_atoms == [0, -1]
 
 
 @pytest.mark.usefixtures("chemsmart_templates_config")

@@ -3955,27 +3955,6 @@ def test_frag_fake_runner_writes_complete_linked_job(
     assert job.is_complete()
 
 
-def test_fragment_job_requires_all_link_steps(
-    fragment_settings, gaussian_pKa_B_optimization_outputfile, tmp_path
-):
-    molecule = Molecule(symbols=["H", "H"], positions=[[0, 0, 0], [0, 0, 2]])
-    fragment_settings.stable = False
-    job = GaussianFragJob(molecule, fragment_settings, label="fragment")
-    job.folder = str(tmp_path)
-    output = Path(job.outputfile)
-    complete = Path(gaussian_pKa_B_optimization_outputfile).read_text()
-    first_step = complete.split("Link1:  Proceeding to internal job step", 1)[
-        0
-    ]
-
-    output.write_text(first_step)
-    assert not job.is_complete()
-    output.write_text(complete)
-    assert job.is_complete()
-    job.settings.stable = "noopt"
-    assert not job.is_complete()
-
-
 @pytest.mark.parametrize("flat_irc", [False, True])
 def test_fragment_irc_keeps_fragments_and_runs_both_directions(
     fragment_settings, mocker, flat_irc

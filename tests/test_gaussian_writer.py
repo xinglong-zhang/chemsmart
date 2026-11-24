@@ -1732,8 +1732,10 @@ def test_fragment_writer_preserves_frozen_atom_flags(
             "H(Fragment=2) 0.0", "H(Fragment=2) -1 0.0"
         )
     )
-    molecule = Gaussian16Input(str(fragment_input)).molecule
-    assert molecule.frozen_atoms == [0, -1]
+    source = Gaussian16Input(str(fragment_input))
+    molecule = source.molecule
+    assert molecule.frozen_atoms == [-1]
+    molecule.frozen_atoms = source.coordinate_block.atom_aligned_constraints
 
     buffer = io.StringIO()
     make_gaussian_writer(fragment_settings, molecule)._write_all(buffer)

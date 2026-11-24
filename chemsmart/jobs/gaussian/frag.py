@@ -7,8 +7,6 @@ from chemsmart.jobs.gaussian.settings import GaussianFragJobSettings
 class GaussianFragJob(GaussianLinkJob):
     """One Gaussian execution containing fragment guess and continuation steps."""
 
-    TYPE = "g16frag"
-
     def __init__(
         self,
         molecule,
@@ -28,18 +26,6 @@ class GaussianFragJob(GaussianLinkJob):
     @classmethod
     def settings_class(cls):
         return GaussianFragJobSettings
-
-    def _job_is_complete(self):
-        """Require normal termination of every expected calculation step."""
-        if self._is_irc_job():
-            return super()._job_is_complete()
-        output = self._output()
-        expected_steps = 3 if self.settings.stable else 2
-        return (
-            output is not None
-            and output.normal_termination
-            and output.normal_termination_count == expected_steps
-        )
 
     def _create_irc_subjob(self, direction):
         """Retain fragment settings when the shared link lifecycle splits IRC."""

@@ -2394,6 +2394,14 @@ class GaussianFragJobSettings(GaussianLinkJobSettings):
             raise ValueError("Fragment jobs require a nonperiodic molecule.")
 
         count = self._validate_fragment_assignments(molecule.num_atoms)
+        frozen_atoms = molecule.frozen_atoms
+        if frozen_atoms is not None and len(frozen_atoms) not in (
+            0,
+            molecule.num_atoms,
+        ):
+            raise ValueError(
+                "Provide exactly one freeze flag per atom for frag."
+            )
         for name, values in (
             ("charges", self.fragment_charges),
             ("multiplicities", self.fragment_multiplicities),

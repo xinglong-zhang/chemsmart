@@ -96,7 +96,7 @@ def _parse_fragment_ids(value, num_atoms):
     return [ids_by_atom[index] for index in range(1, num_atoms + 1)]
 
 
-@gaussian.command("frag", cls=MyCommand, include_defaults=False)
+@gaussian.command("frag", cls=MyCommand)
 @click_job_options
 @click_gaussian_jobtype_options
 @click_gaussian_irc_options
@@ -176,6 +176,7 @@ def frag(
         fragment_multiplicities, "--fragment-multiplicities"
     )
     filename = ctx.obj.get("filename")
+    source = None
     if filename and Path(filename).suffix.lower() in {".com", ".gjf", ".inp"}:
         source = Gaussian16Input(filename)
         try:
@@ -203,11 +204,13 @@ def frag(
             stepsize=stepsize,
             flat_irc=flat_irc,
         )
-        settings_kwargs.update(
-            (name, value)
-            for name, value in irc_options.items()
-            if ctx.get_parameter_source(name) != ParameterSource.DEFAULT
-        )
+        # A replayed Click default would override the IRC project setting.
+        recorded_options = ctx.obj["subcommand"][-1]["kwargs"]
+        for name, value in irc_options.items():
+            if ctx.get_parameter_source(name) == ParameterSource.DEFAULT:
+                recorded_options.pop(name, None)
+            else:
+                settings_kwargs[name] = value
     molecules = ctx.obj["molecules"]
     if not molecules:
         raise click.UsageError("Select at least one structure for frag.")
@@ -221,6 +224,15 @@ def frag(
     for molecule, index in selected:
         prefix = f"Structure {index}. " if index is not None else ""
         try:
+            if (
+                source is not None
+                and molecule.frozen_atoms is not None
+                and 0 < len(molecule.frozen_atoms) < molecule.num_atoms
+            ):
+                molecule = molecule.copy()
+                molecule.frozen_atoms = (
+                    source.coordinate_block.atom_aligned_constraints
+                )
             ids = (
                 input_ids
                 if fragment_ids is None
