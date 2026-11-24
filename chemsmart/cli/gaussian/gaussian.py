@@ -227,6 +227,18 @@ def click_gaussian_jobtype_options(f):
     return wrapper_common_options
 
 
+def click_gaussian_stability_option(f):
+    """Select the value of Gaussian's Stable keyword."""
+    return click.option(
+        "-st",
+        "--stable",
+        type=str,
+        default="opt",
+        show_default=True,
+        help="Gaussian stability options. See https://gaussian.com/stable/.",
+    )(f)
+
+
 def click_gaussian_solvent_options(f):
     """Common click options for Gaussian solvent settings."""
 
@@ -590,6 +602,16 @@ def gaussian(
             f"No filename is supplied and Gaussian default settings are used:\n"
             f"{job_settings.__dict__} "
         )
+    elif ctx.invoked_subcommand == "frag" and filename.endswith(
+        (".com", ".gjf")
+    ):
+        from chemsmart.io.gaussian.input import Gaussian16Input
+
+        # The source provides the molecule; frag builds a new route.
+        source = Gaussian16Input(filename)
+        job_settings = GaussianJobSettings(
+            charge=source.charge, multiplicity=source.multiplicity
+        )
     elif filename.endswith((".com", ".gjf", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here
         #  and do not use any defaults!
@@ -791,7 +813,9 @@ def gaussian(
                 label = f"{label}_RID-{record_id}"
             elif record_index is not None:
                 label = f"{label}_RI-{record_index}"
-        label = f"{label}_{ctx.invoked_subcommand}"
+        # The fragment command places its workflow suffix after the job type.
+        if ctx.invoked_subcommand != "frag":
+            label = f"{label}_{ctx.invoked_subcommand}"
     label = clean_label(label)
 
     # if user has specified an index to use to access particular structure

@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from chemsmart.jobs.gaussian.settings import GaussianFragJobSettings
 from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
 from tests.helpers import (
     ConcreteGaussianProjectSettings,
@@ -1018,3 +1019,33 @@ def concrete_gaussian_project_settings():
     """A fresh hardcoded (non-YAML) :class:`ConcreteGaussianProjectSettings`
     instance, exercising ``GaussianProjectSettings``' default methods."""
     return ConcreteGaussianProjectSettings()
+
+
+@pytest.fixture
+def fragment_input(tmp_path):
+    path = tmp_path / "fragments.com"
+    path.write_text(
+        "%chk=fragments.chk\n#p umn15/def2svp Guess=(Fragment=2,Only)\n\n"
+        "Fragment guess\n\n0 1 0 2 0 -2\n"
+        "H(Fragment=1) 0.0 0.0 0.0\nH(Fragment=2) 0.0 0.0 2.0\n\n"
+    )
+    return path
+
+
+@pytest.fixture
+def fragment_settings():
+    return GaussianFragJobSettings(
+        functional="mn15",
+        basis="def2svp",
+        charge=0,
+        multiplicity=1,
+        jobtype="opt",
+        freq=True,
+        title="Fragment test",
+        fragment_ids=[1, 2],
+        fragment_charges=[0, 0],
+        fragment_multiplicities=[2, -2],
+        solvent_model="smd",
+        solvent_id="generic",
+        custom_solvent="eps=7.55\n",
+    )

@@ -16,6 +16,8 @@ import logging
 import os
 import re
 
+from ase.data import atomic_numbers
+
 from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.jobs.settings import MolecularJobSettings
@@ -2338,6 +2340,257 @@ class GaussianTDDFTJobSettings(GaussianJobSettings):
         route_string += f" TD({self.states},nstates={self.nstates},root={self.root}{eqsolv})"
 
         return route_string
+
+
+class GaussianFragJobSettings(GaussianLinkJobSettings):
+    """Settings for a fragment guess followed by an ordinary Gaussian task.
+
+    Fragment multiplicities may be negative to orient unpaired electrons beta.
+    These specify an initial guess, not persistent charge/spin constraints.
+    """
+
+    CONTINUATION_TYPES = (
+        "sp",
+        "opt",
+        "ts",
+        "modred",
+        "scan",
+        "irc",
+        "td",
+        "wbi",
+        "nci",
+    )
+
+    def __init__(
+        self,
+        fragment_ids=None,
+        fragment_charges=None,
+        fragment_multiplicities=None,
+        stable="opt",
+        states="singlets",
+        root=1,
+        nstates=3,
+        eqsolv=None,
+        **kwargs,
+    ):
+        super().__init__(stable=stable, **kwargs)
+        self.fragment_ids = list(fragment_ids or [])
+        self.fragment_charges = list(fragment_charges or [])
+        self.fragment_multiplicities = list(fragment_multiplicities or [])
+        self.states = states
+        self.root = root
+        self.nstates = nstates
+        self.eqsolv = eqsolv
+
+    def validate_fragments(self, molecule):
+        """Reject incomplete partitions and incompatible electron/spin counts."""
+        from chemsmart.io.molecules.structure import QMMMMolecule
+
+        if isinstance(molecule, QMMMMolecule):
+            raise ValueError("Fragment jobs require a non-ONIOM molecule.")
+        if molecule.pbc_conditions is not None and any(
+            molecule.pbc_conditions
+        ):
+            raise ValueError("Fragment jobs require a nonperiodic molecule.")
+
+        count = self._validate_fragment_assignments(molecule.num_atoms)
+        frozen_atoms = molecule.frozen_atoms
+        if frozen_atoms is not None and len(frozen_atoms) not in (
+            0,
+            molecule.num_atoms,
+        ):
+            raise ValueError(
+                "Provide exactly one freeze flag per atom for frag."
+            )
+        for name, values in (
+            ("charges", self.fragment_charges),
+            ("multiplicities", self.fragment_multiplicities),
+        ):
+            if len(values) != count:
+                raise ValueError(
+                    f"Expected {count} fragment {name}, got {len(values)}."
+                )
+            if any(type(value) is not int for value in values):
+                raise ValueError(f"Fragment {name} must be integers.")
+
+        if self.charge is None:
+            raise ValueError("Specify the total molecular charge.")
+        charge_sum = sum(self.fragment_charges)
+        if charge_sum != self.charge:
+            raise ValueError(
+                f"Fragment charges sum to {charge_sum}. "
+                f"The total molecular charge is {self.charge}."
+            )
+        if self.multiplicity is None or self.multiplicity < 1:
+            raise ValueError("Total multiplicity must be a positive integer.")
+        spin = 0
+        for index, (charge, multiplicity) in enumerate(
+            zip(self.fragment_charges, self.fragment_multiplicities), start=1
+        ):
+            if multiplicity == 0:
+                raise ValueError(
+                    f"Fragment {index} has multiplicity 0. "
+                    "Use a nonzero signed integer."
+                )
+            electrons = (
+                sum(
+                    atomic_numbers[str(symbol)]
+                    for symbol, fragment in zip(
+                        molecule.symbols, self.fragment_ids
+                    )
+                    if fragment == index
+                )
+                - charge
+            )
+            unpaired = abs(multiplicity) - 1
+            if electrons < unpaired or (electrons - unpaired) % 2:
+                raise ValueError(
+                    f"Fragment {index} has incompatible charge and multiplicity. "
+                    f"Charge {charge} gives {electrons} electrons for "
+                    f"multiplicity {multiplicity}."
+                )
+            spin += unpaired if multiplicity > 0 else -unpaired
+        if abs(spin) != self.multiplicity - 1:
+            raise ValueError(
+                f"Signed fragment spins imply total multiplicity {abs(spin) + 1}. "
+                f"The requested total multiplicity is {self.multiplicity}."
+            )
+        if not self.chk:
+            raise ValueError("Fragment jobs require a checkpoint file.")
+        if self.jobtype not in (*self.CONTINUATION_TYPES, "ircf", "ircr"):
+            raise ValueError("Unsupported fragment continuation job type.")
+        if self.route_to_be_written or self.input_string:
+            raise ValueError(
+                "Fragment jobs generate their own routes; raw input/route is unsupported."
+            )
+        self._unrestricted_functional()
+        self._extra_route_parameters()
+        self._stability_option()
+
+    def _validate_fragment_assignments(self, num_atoms):
+        """Check per-atom fragment assignments and return the fragment count."""
+        count = len(self.fragment_ids)
+        if count != num_atoms:
+            raise ValueError(
+                "Provide one fragment ID per atom. "
+                f"Got {count} IDs for a structure with {num_atoms} atoms."
+            )
+        for atom, fragment_id in enumerate(self.fragment_ids, start=1):
+            if fragment_id is None:
+                raise ValueError(f"Atom {atom} is missing a fragment ID.")
+            if type(fragment_id) is not int:
+                raise ValueError(
+                    f"The fragment ID for atom {atom} must be an integer."
+                )
+        fragment_ids = set(self.fragment_ids)
+        count = len(fragment_ids)
+        if fragment_ids != set(range(1, count + 1)):
+            raise ValueError(
+                "Fragment IDs must be consecutive integers starting at 1. "
+                f"Got {sorted(fragment_ids)}."
+            )
+        if count < 2:
+            raise ValueError(f"Provide at least two fragments. Got {count}.")
+        return count
+
+    def _unrestricted_functional(self):
+        """Resolve the DFT method used by each fragment calculation step."""
+        if not self.functional or self.ab_initio or self.semiempirical:
+            raise ValueError(
+                "Fragment jobs currently require a DFT functional."
+            )
+        prefix = self.functional[0].lower()
+        if prefix == "r":
+            raise ValueError(
+                "Specify an unrestricted DFT functional for fragment jobs."
+            )
+        return self.functional if prefix == "u" else "u" + self.functional
+
+    def _extra_route_parameters(self):
+        """Check keywords managed by the fragment workflow."""
+        extra = self.additional_route_parameters or ""
+        if re.search(
+            r"(?<!\S)(?:guess|geom(?:etry)?|stable|scrf)(?=\s|[=(]|$)",
+            extra,
+            re.IGNORECASE,
+        ):
+            raise ValueError(
+                "frag controls Guess, Geom, Stable and SCRF. "
+                "Use solvent settings to specify SCRF."
+            )
+        return extra
+
+    def _stability_option(self):
+        """Return a Stable keyword value, including the legacy boolean form."""
+        if self.stable is True:
+            return "opt"
+        if self.stable is False or self.stable is None:
+            return None
+        if not isinstance(self.stable, str):
+            raise ValueError("Stable options must be a string.")
+        option = self.stable.strip()
+        if not re.fullmatch(
+            r"[A-Za-z0-9]+|\(\s*[A-Za-z0-9]+(?:\s*,\s*[A-Za-z0-9]+)*\s*\)",
+            option,
+        ):
+            raise ValueError(
+                "Use one Stable option or a parenthesized list, "
+                "such as 'noopt' or '(opt,xqc)'."
+            )
+        return option
+
+    def _get_route_string_from_jobtype(self):
+        """Return the first step's route, like other linked settings."""
+        return self.calculation_steps()[0].route_string
+
+    @property
+    def link_route_string(self):
+        """Return the target step's route after the fragment guess."""
+        return self.calculation_steps()[-1].route_string
+
+    def calculation_steps(self):
+        """Build independent settings for guess, stability and continuation."""
+        if self.jobtype in {"ircf", "ircr"}:
+            target = GaussianIRCJobSettings(**self.__dict__)
+        elif self.jobtype == "td":
+            target = GaussianTDDFTJobSettings(**self.__dict__)
+        else:
+            target = GaussianJobSettings(**self.__dict__)
+        target.functional = self._unrestricted_functional()
+        single_point = GaussianJobSettings(**target.__dict__).merge(
+            {
+                "jobtype": "sp",
+                "freq": False,
+                "numfreq": False,
+                "additional_opt_options_in_route": None,
+                "modred": None,
+                "forces": False,
+                "append_additional_info": None,
+            },
+            merge_all=True,
+        )
+        initial = single_point.copy()
+        initial.solvent_model = initial.solvent_id = initial.custom_solvent = (
+            None
+        )
+        initial.additional_solvent_options = None
+        extra = self._extra_route_parameters()
+        initial.additional_route_parameters = (
+            f"{extra} guess=(fragment={len(self.fragment_charges)},only)"
+        ).strip()
+        steps = [initial]
+        stable = self._stability_option()
+        if stable is not None:
+            stability = single_point
+            stability.additional_route_parameters = (
+                f"{extra} stable={stable} geom=check guess=read"
+            ).strip()
+            steps.append(stability)
+        target.additional_route_parameters = (
+            f"{extra} geom=check guess=read".strip()
+        )
+        steps.append(target)
+        return steps
 
 
 class GaussianQMMMJobSettings(GaussianJobSettings):

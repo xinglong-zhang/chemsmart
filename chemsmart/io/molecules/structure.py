@@ -3528,6 +3528,11 @@ class CoordinateBlock:
         return self._get_constraints()
 
     @property
+    def atom_aligned_constraints(self):
+        """Return freeze flags aligned with atom order, filling omitted flags."""
+        return self._get_constraints(align_atoms=True)
+
+    @property
     def partitions(self):
         """Returns a list of partition levels for the atoms."""
         return self._get_partitions()
@@ -3627,7 +3632,9 @@ class CoordinateBlock:
             )
         return symbols
 
-    def _get_atomic_numbers_positions_and_constraints(self):
+    def _get_atomic_numbers_positions_and_constraints(
+        self, *, align_atoms=False
+    ):
         atomic_numbers = []
         positions = []
         constraints = []
@@ -3740,6 +3747,8 @@ class CoordinateBlock:
                 z_coordinate = float(line_elements[3])
             position = [x_coordinate, y_coordinate, z_coordinate]
             positions.append(position)
+            if align_atoms and len(constraints) < len(positions):
+                constraints.append(0)
         if any(len(i) == 0 for i in [atomic_numbers, positions]):
             raise ValueError(
                 f"No atomic numbers or positions found in the coordinate block: {self.coordinate_block}!"
@@ -3762,9 +3771,9 @@ class CoordinateBlock:
         _, positions, _ = self._get_atomic_numbers_positions_and_constraints()
         return positions
 
-    def _get_constraints(self):
-        _, _, constraints = (
-            self._get_atomic_numbers_positions_and_constraints()
+    def _get_constraints(self, *, align_atoms=False):
+        _, _, constraints = self._get_atomic_numbers_positions_and_constraints(
+            align_atoms=align_atoms
         )
         if len(constraints) == 0:
             return None

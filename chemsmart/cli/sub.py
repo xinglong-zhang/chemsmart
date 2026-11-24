@@ -5,6 +5,7 @@ This module provides command-line interface for submitting jobs to
 various queuing systems and cluster schedulers.
 """
 
+import copy
 import logging
 
 import click
@@ -308,6 +309,21 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         for job submission purposes.
         """
         commands = ctx.obj["subcommand"]
+        from chemsmart.jobs.gaussian.frag import GaussianFragJob
+
+        if (
+            isinstance(job, GaussianFragJob)
+            and job.submission_index is not None
+        ):
+            # A script for one structure must replay only that selection.
+            commands = copy.deepcopy(commands)
+            gaussian = next(
+                command
+                for command in commands
+                if command["name"] == "gaussian"
+            )
+            gaussian["kwargs"]["index"]["value"] = str(job.submission_index)
+            gaussian["kwargs"]["structure_index"]["value"] = None
         args = CtxObjArguments(commands, entry_point="sub")
         cli_args = args.reconstruct_command_line()[
             1:

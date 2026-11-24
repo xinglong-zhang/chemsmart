@@ -6,6 +6,7 @@ from chemsmart.cli.gaussian.gaussian import (
     click_gaussian_irc_options,
     click_gaussian_jobtype_options,
     click_gaussian_solvent_options,
+    click_gaussian_stability_option,
     gaussian,
 )
 from chemsmart.cli.job import click_job_options
@@ -24,14 +25,7 @@ logger = logging.getLogger(__name__)
 @click_gaussian_jobtype_options
 @click_gaussian_solvent_options
 @click_gaussian_irc_options
-@click.option(
-    "-st",
-    "--stable",
-    type=str,
-    default="opt",
-    help="Gaussian stability test. See https://gaussian.com/stable/ for "
-    'options. Defaults to "stable=opt".',
-)
+@click_gaussian_stability_option
 @click.option(
     "-g",
     "--guess",

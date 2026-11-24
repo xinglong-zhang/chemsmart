@@ -2,8 +2,8 @@
  Other Gaussian Jobs
 #####################
 
-This page covers additional Gaussian job types including multi-step link jobs, custom user-defined calculations, and
-direct input file execution.
+This page covers broken-symmetry link jobs, fragment guesses, custom user-defined calculations, and direct input file
+execution.
 
 ***********
  Link Jobs
@@ -90,6 +90,73 @@ This sets ``guess=(mix,always)`` in the route string:
    ...
    # opt freq um062x def2svp geom=check guess=read
    ...
+
+.. _gaussian-fragment-jobs:
+
+*********************
+ Fragment Guess Jobs
+*********************
+
+``frag`` generates an unrestricted DFT guess from fragments, checks wavefunction stability, and runs the selected task.
+Fragment charges and signed multiplicities apply to the initial guess.
+
+Fragment Options
+================
+
+.. list-table::
+   :header-rows: 1
+
+   -  -  Option
+      -  Description
+
+   -  -  ``-j, --jobtype``
+      -  Required continuation. Choose ``opt``, ``ts``, ``sp``, ``modred``, ``scan``, ``irc``, ``td``, ``wbi``, or
+         ``nci``.
+
+   -  -  ``-st, --stable``
+      -  Defaults to ``opt``.
+
+   -  -  ``-fi, --fragment-ids``
+      -  Groups of 1-based atom indices and inclusive ranges, such as ``[[1,4-10],[2,3]]``. Assign each atom once.
+
+   -  -  ``-fc, --fragment-charges``
+      -  One integer charge per group. The charges must sum to the total charge.
+
+   -  -  ``-fm, --fragment-multiplicities``
+      -  One signed multiplicity per group. A negative sign assigns the fragment's unpaired electrons to beta orbitals.
+         The signed spins must agree with the total multiplicity.
+
+Put Gaussian options such as total charge (``-c``), total multiplicity (``-m``), and solvent before ``frag``. Put the
+options above after ``frag``.
+
+Input Examples
+==============
+
+For two separated hydrogen atoms in an open-shell singlet, use total multiplicity 1 and fragment multiplicities
+``[2,-2]``.
+
+.. code:: bash
+
+   chemsmart sub gaussian -p project -f h2.xyz -c 0 -m 1 frag -j sp \
+       -fi '[[1],[2]]' -fc '[0,0]' -fm '[2,-2]'
+
+For the triplet, use ``-m 3`` and ``-fm '[2,2]'``.
+
+For ``.com``, ``.gjf``, and ``.inp`` files, ``frag`` reads the ``Element(Fragment=N)`` labels and charge/multiplicity
+pairs from the first geometry block. Each explicit fragment option overrides its corresponding field.
+
+.. code:: bash
+
+   chemsmart sub gaussian -p project -f fragments.com frag -j opt
+
+Generated Workflow
+==================
+
+#. ``Guess=(Fragment=N,Only)`` builds the fragment guess without solvent.
+#. ``Stable=Opt`` checks the wavefunction by default and reoptimizes it if an instability is found.
+#. The requested task runs with the selected project and CLI settings.
+
+Both continuation steps use ``Geom=Check Guess=Read`` and the same checkpoint. They use the configured solvent settings.
 
 ******************
  Custom User Jobs

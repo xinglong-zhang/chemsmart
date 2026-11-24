@@ -1,5 +1,6 @@
 import os
 from filecmp import cmp
+from pathlib import Path
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
@@ -9,6 +10,7 @@ from chemsmart.jobs.gaussian import GaussianOptJob
 from chemsmart.jobs.gaussian.crest import GaussianCrestJob
 from chemsmart.jobs.gaussian.custom import GaussianCustomJob
 from chemsmart.jobs.gaussian.dias import GaussianDIASJob
+from chemsmart.jobs.gaussian.frag import GaussianFragJob
 from chemsmart.jobs.gaussian.irc import GaussianIRCJob
 from chemsmart.jobs.gaussian.job import (
     GaussianComJob,
@@ -3938,3 +3940,43 @@ class TestGaussianTDDFTJob:
             jobrunner=sentinel_runner,
         )
         assert job.jobrunner is sentinel_runner
+
+
+def test_frag_fake_runner_writes_complete_linked_job(
+    fragment_settings, pbs_server, tmp_path
+):
+    molecule = Molecule(symbols=["H", "H"], positions=[[0, 0, 0], [0, 0, 2]])
+    job = GaussianFragJob(molecule, fragment_settings)
+    runner = JobRunner.from_job(job, pbs_server, fake=True, scratch=False)
+    job.jobrunner = runner
+    job.folder = str(tmp_path)
+    job.run()
+    assert Path(job.inputfile).read_text().count("--Link1--") == 2
+    assert job.is_complete()
+
+
+@pytest.mark.parametrize("flat_irc", [False, True])
+def test_fragment_irc_keeps_fragments_and_runs_both_directions(
+    fragment_settings, mocker, flat_irc
+):
+    fragment_settings.jobtype = "irc"
+    fragment_settings.flat_irc = flat_irc
+    molecule = Molecule(symbols=["H", "H"], positions=[[0, 0, 0], [0, 0, 2]])
+    job = GaussianFragJob(
+        molecule, fragment_settings, label="hydrogen_irc_frag"
+    )
+    jobs = job._get_irc_jobs()
+    assert [child.settings.jobtype for child in jobs] == ["ircf", "ircr"]
+    suffix = "_flat" if flat_irc else ""
+    assert [child.label for child in jobs] == [
+        f"hydrogen_ircf{suffix}_frag",
+        f"hydrogen_ircr{suffix}_frag",
+    ]
+    assert all(isinstance(child, GaussianFragJob) for child in jobs)
+    assert all(
+        child.settings.fragment_multiplicities == [2, -2] for child in jobs
+    )
+    assert jobs[0].chkfile != jobs[1].chkfile
+    run_job = mocker.patch.object(GaussianFragJob, "run")
+    job._run()
+    assert run_job.call_count == 2

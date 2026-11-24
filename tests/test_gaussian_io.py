@@ -6044,3 +6044,10 @@ class TestCubeFileOperatorWriteResults:
         mocker.patch.object(operator, "_all_checked", return_value=False)
         with pytest.raises(ValueError, match="geometries"):
             operator.write_results()
+
+
+def test_read_fragment_metadata(fragment_input):
+    source = Gaussian16Input(str(fragment_input))
+    assert source.fragment_ids == [1, 2]
+    assert source.fragment_charge_multiplicities == [(0, 2), (0, -2)]
+    assert source.molecule.num_atoms == 2

@@ -42,6 +42,15 @@
    :undoc-members:
    :show-inheritance:
 
+************************************
+ chemsmart.cli.gaussian.frag module
+************************************
+
+.. automodule:: chemsmart.cli.gaussian.frag
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 ****************************************
  chemsmart.cli.gaussian.gaussian module
 ****************************************

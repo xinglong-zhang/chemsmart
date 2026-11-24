@@ -20,6 +20,7 @@ can be inspected without running an actual calculation.
 import inspect
 import os
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import click
@@ -27,11 +28,17 @@ import pytest
 from click.testing import CliRunner
 
 import chemsmart.cli.gaussian.traj  # noqa: F401 - ensures module is cached
+from chemsmart.cli.gaussian.frag import frag
 from chemsmart.cli.gaussian.gaussian import gaussian
+from chemsmart.io.gaussian.input import Gaussian16Input
+from chemsmart.jobs.gaussian.frag import GaussianFragJob
+from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from tests.helpers import (
     make_cli_ctx_obj,
     run_gaussian_and_capture_settings,
     run_gaussian_qmmm_callback,
+    run_generated_script_command,
+    submit_for_test,
 )
 
 # ``chemsmart.cli.gaussian.__init__`` does ``from .traj import traj``,
@@ -3092,3 +3099,419 @@ class TestQmmmMoleculeConversionBlockInGaussianGroup:
         # still the exploding one, since the outer except left it as-is.
         assert len(ctx.obj["molecules"]) == 1
         assert ctx.obj["molecules"][0] is real_molecule
+
+
+@pytest.mark.parametrize(
+    "jobtype,options",
+    [
+        ("opt", []),
+        ("ts", []),
+        ("sp", []),
+        ("modred", ["-c", "[[1,2]]"]),
+        ("scan", ["-c", "[[1,2]]", "-s", "0.1", "-n", "3"]),
+        ("irc", ["--direction", "reverse", "--stepsize", "8"]),
+    ],
+)
+def test_frag_reads_input_with_default_stability(
+    fragment_input, concrete_gaussian_project_settings, jobtype, options
+):
+    source = Gaussian16Input(str(fragment_input))
+    result = CliRunner().invoke(
+        frag,
+        ["-j", jobtype, *options],
+        obj={
+            "project_settings": concrete_gaussian_project_settings,
+            "job_settings": GaussianJobSettings(charge=0, multiplicity=1),
+            "keywords": ("charge", "multiplicity"),
+            "filename": str(fragment_input),
+            "molecules": [source.molecule],
+            "label": "hydrogen_frag",
+            "jobrunner": None,
+        },
+        standalone_mode=False,
+    )
+    assert result.exit_code == 0, result.exception
+    assert isinstance(result.return_value, GaussianFragJob)
+    assert result.return_value.settings.stable == "opt"
+    assert result.return_value.settings.fragment_multiplicities == [2, -2]
+    assert result.return_value.settings.jobtype == jobtype
+    if jobtype in {"scan", "modred"}:
+        assert result.return_value.settings.modred is not None
+    if jobtype == "irc":
+        jobs = result.return_value._get_irc_jobs()
+        assert len(jobs) == 1
+        assert jobs[0].settings.jobtype == "ircr"
+        assert jobs[0].settings.stepsize == 8
+
+
+def test_frag_irc_preserves_project_settings_unless_overridden(
+    fragment_input, concrete_gaussian_project_settings, mocker
+):
+    project = concrete_gaussian_project_settings
+    irc_settings = project.irc_settings()
+    irc_settings.direction = "forward"
+    irc_settings.predictor = "HPC"
+    irc_settings.recorrect = "Always"
+    irc_settings.stepsize = 12
+    irc_settings.maxpoints = 25
+    irc_settings.flat_irc = True
+    mocker.patch.object(project, "irc_settings", return_value=irc_settings)
+
+    result = CliRunner().invoke(
+        frag,
+        ["-j", "irc", "--stepsize", "8"],
+        obj={
+            "project_settings": project,
+            "job_settings": GaussianJobSettings(charge=0, multiplicity=1),
+            "keywords": ("charge", "multiplicity"),
+            "filename": str(fragment_input),
+            "molecules": [Gaussian16Input(str(fragment_input)).molecule],
+            "label": "hydrogen",
+            "jobrunner": None,
+        },
+        standalone_mode=False,
+    )
+    assert result.exit_code == 0, result.exception
+    job = result.return_value
+    assert job.label == "hydrogen_ircf_flat_frag"
+    (child,) = job._get_irc_jobs()
+    assert child.label == job.label
+    assert child.settings.predictor == "HPC"
+    assert child.settings.recorrect == "Always"
+    assert child.settings.maxpoints == 25
+    assert child.settings.stepsize == 8
+    assert irc_settings.stepsize == 12
+
+
+@pytest.mark.parametrize(
+    "option,value,exit_code,message",
+    [
+        ("-fi", "[[1],[1,2]]", 2, "Atom 1 is listed more than once."),
+        ("-fi", "[[1,1],[2]]", 2, "Atom 1 is listed more than once."),
+        ("-fi", "[[1],[3]]", 2, "'3' is out of bounds"),
+        ("-fi", "[[0],[2]]", 2, "'0' is out of bounds"),
+        ("-fi", "[[-1],[2]]", 2, "'-1' is out of bounds"),
+        ("-fi", "[[1],[2-999999999]]", 2, "'2-999999999' is out of bounds"),
+        ("-fi", "[[1]]", 2, "Missing atom indices 2"),
+        ("-fi", "[[1],[]]", 2, "Fragment 2 has invalid atom indices"),
+        ("-fi", "[[1],[3-2]]", 2, "The range start 3 exceeds its end 2"),
+        ("-fi", "[[1],[2]", 2, "Expected atom groups"),
+        ("-fi", "1,2,2", 1, "Got 3 IDs for a structure with 2 atoms"),
+        ("-fi", "[[1-2]]", 1, "Provide at least two fragments"),
+        ("-fc", "[0]", 1, "Expected 2 fragment charges, got 1"),
+        ("-fc", "[0,0,0]", 1, "Expected 2 fragment charges, got 3"),
+        ("-fc", "[1,0]", 1, "Fragment charges sum to 1"),
+        ("-fc", "[0,1.5]", 2, "Value 2 ('1.5') must be an integer"),
+        ("-fc", "[]", 2, "Expected at least one integer"),
+        ("-fm", "[2]", 1, "Expected 2 fragment multiplicities, got 1"),
+        ("-fm", "[2,-2,2]", 1, "Expected 2 fragment multiplicities, got 3"),
+        ("-fm", "[2,0]", 1, "Fragment 2 has multiplicity 0"),
+        ("-fm", "[2,-1]", 1, "Fragment 2 has incompatible charge"),
+        (
+            "-fm",
+            "[2,2]",
+            1,
+            "Signed fragment spins imply total multiplicity 3",
+        ),
+    ],
+)
+def test_frag_reports_invalid_fragment_options(
+    fragment_input,
+    concrete_gaussian_project_settings,
+    option,
+    value,
+    exit_code,
+    message,
+):
+    result = CliRunner().invoke(
+        frag,
+        ["-j", "sp", option, value],
+        obj={
+            "project_settings": concrete_gaussian_project_settings,
+            "job_settings": GaussianJobSettings(charge=0, multiplicity=1),
+            "keywords": ("charge", "multiplicity"),
+            "filename": str(fragment_input),
+            "molecules": [Gaussian16Input(str(fragment_input)).molecule],
+            "label": "hydrogen_frag",
+            "jobrunner": None,
+        },
+    )
+    assert result.exit_code == exit_code
+    assert message in result.output
+
+
+@pytest.mark.usefixtures("chemsmart_templates_config")
+def test_frag_submission_reports_invalid_structure_index(
+    tmp_path,
+    monkeypatch,
+    server_yaml_file,
+    gaussian_yaml_settings_gas_solv_project_name,
+):
+    monkeypatch.chdir(tmp_path)
+    xyz = tmp_path / "fragments.xyz"
+    xyz.write_text(
+        "2\nFrame 1\nH 0 0 0\nH 0 0 2\n"
+        "3\nFrame 2\nH 0 0 0\nH 0 0 2\nH 0 0 4\n"
+    )
+    result = submit_for_test(
+        server_yaml_file,
+        "gaussian",
+        "-p",
+        gaussian_yaml_settings_gas_solv_project_name,
+        "-f",
+        xyz,
+        "-i",
+        "1,2",
+        "-c",
+        "0",
+        "-m",
+        "1",
+        "frag",
+        "-j",
+        "sp",
+        "-fi",
+        "[[1],[2]]",
+        "-fc",
+        "[0,0]",
+        "-fm",
+        "[2,-2]",
+    )
+    assert result.exit_code == 2
+    assert "Invalid value for --fragment-ids" in result.output
+    assert "Structure 2. Missing atom indices 3" in result.output
+    assert not list(tmp_path.glob("chemsmart_run_*.py"))
+
+
+@pytest.mark.usefixtures("chemsmart_templates_config")
+def test_frag_submission_reuses_linked_modred_input(
+    fragment_input,
+    tmp_path,
+    monkeypatch,
+    server_yaml_file,
+    gaussian_yaml_settings_gas_solv_project_name,
+    mocker,
+):
+    monkeypatch.chdir(tmp_path)
+    fragment_input.write_text(
+        fragment_input.read_text() + "--Link1--\n%chk=fragments.chk\n"
+        "# stable=opt umn15/def2svp geom=check guess=read\n\n"
+        "Stability check\n\n0 1\n\n"
+        "--Link1--\n%chk=fragments.chk\n"
+        "# opt=modredundant umn15/def2svp geom=check guess=read\n\n"
+        "Constrained optimization\n\n0 1\n\nB 1 2 F\n\n"
+    )
+    result = submit_for_test(
+        server_yaml_file,
+        "gaussian",
+        "-p",
+        gaussian_yaml_settings_gas_solv_project_name,
+        "-f",
+        fragment_input,
+        "frag",
+        "-j",
+        "modred",
+        "-c",
+        "[[2,1]]",
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    (script,) = tmp_path.glob("chemsmart_run_*.py")
+    run_job = mocker.patch.object(GaussianFragJob, "run", autospec=True)
+    node = run_generated_script_command(script)
+    assert node.exit_code == 0, (node.output, node.exception)
+    run_job.assert_called_once()
+    settings = run_job.call_args.args[0].settings
+    assert settings.charge == 0
+    assert settings.multiplicity == 1
+    assert settings.fragment_multiplicities == [2, -2]
+    assert settings.modred == [[2, 1]]
+
+
+@pytest.mark.usefixtures("chemsmart_templates_config")
+@pytest.mark.parametrize(
+    "label_options,expected_label,stable_options,expected_stable",
+    [
+        ([], "fragments_opt_frag", [], "opt"),
+        (
+            ["-l", "custom"],
+            "custom_opt_frag",
+            ["--stable", "(opt,xqc)"],
+            "(opt,xqc)",
+        ),
+        (["-a", "oss"], "fragments_oss_opt_frag", ["-st", "noopt"], "noopt"),
+    ],
+)
+def test_sub_preserves_frag_options_and_label(
+    fragment_input,
+    tmp_path,
+    monkeypatch,
+    server_yaml_file,
+    gaussian_yaml_settings_gas_solv_project_name,
+    mocker,
+    label_options,
+    expected_label,
+    stable_options,
+    expected_stable,
+):
+    monkeypatch.chdir(tmp_path)
+    fragment_input.write_text(
+        fragment_input.read_text().replace(
+            "H(Fragment=2) 0.0", "H(Fragment=2) -1 0.0"
+        )
+    )
+    result = submit_for_test(
+        server_yaml_file,
+        "gaussian",
+        "-p",
+        gaussian_yaml_settings_gas_solv_project_name,
+        "-f",
+        fragment_input,
+        *label_options,
+        "frag",
+        "-j",
+        "opt",
+        *stable_options,
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    scripts = list(tmp_path.glob("chemsmart_run_*.py"))
+    assert len(scripts) == 1
+    run_job = mocker.patch.object(GaussianFragJob, "run", autospec=True)
+    node = run_generated_script_command(scripts[0])
+    assert node.exit_code == 0, (node.output, node.exception)
+    run_job.assert_called_once()
+    job = run_job.call_args.args[0]
+    assert job.label == expected_label
+    assert Path(job.inputfile).name == f"{expected_label}.com"
+    assert scripts[0].stem == f"chemsmart_run_{job.execution_name}"
+    assert job.settings.stable == expected_stable
+    assert job.settings.fragment_multiplicities == [2, -2]
+    assert job.molecule.frozen_atoms == [0, -1]
+
+
+@pytest.mark.usefixtures("chemsmart_templates_config")
+def test_frag_irc_submission_uses_distinct_directional_scripts(
+    fragment_input,
+    tmp_path,
+    monkeypatch,
+    server_yaml_file,
+    gaussian_yaml_settings_defaults,
+    gaussian_yaml_settings_gas_solv,
+    mocker,
+):
+    monkeypatch.chdir(tmp_path)
+    defaults = Path(gaussian_yaml_settings_defaults).read_text()
+    (tmp_path / "defaults.yaml").write_text(
+        defaults + "\nstepsize: 12\nflat_irc: true\n"
+    )
+    (tmp_path / "project.yaml").write_text(
+        Path(gaussian_yaml_settings_gas_solv).read_text()
+    )
+    for direction, options in (
+        ("forward", ["--stepsize", "20", "--no-flat-irc"]),
+        ("reverse", []),
+    ):
+        result = submit_for_test(
+            server_yaml_file,
+            "gaussian",
+            "-p",
+            str(tmp_path / "project"),
+            "-f",
+            fragment_input,
+            "frag",
+            "-j",
+            "irc",
+            "--direction",
+            direction,
+            *options,
+        )
+        assert result.exit_code == 0, (result.output, result.exception)
+
+    scripts = sorted(tmp_path.glob("chemsmart_run_*.py"))
+    assert len(scripts) == 2
+    run_job = mocker.patch.object(GaussianFragJob, "run", autospec=True)
+    for script, (jobtype, stepsize, flat_irc) in zip(
+        scripts, [("ircf", 20, False), ("ircr", 12, True)]
+    ):
+        run_job.reset_mock()
+        node = run_generated_script_command(script)
+        assert node.exit_code == 0, (node.output, node.exception)
+        run_job.assert_called_once()
+        job = run_job.call_args.args[0]
+        suffix = "_flat" if flat_irc else ""
+        assert job.label == f"fragments_{jobtype}{suffix}_frag"
+        assert script.stem == f"chemsmart_run_{job.execution_name}"
+        (child,) = job._get_irc_jobs()
+        assert child.settings.jobtype == jobtype
+        assert child.settings.stepsize == stepsize
+        assert child.settings.flat_irc is flat_irc
+        assert child.label == job.label
+
+
+@pytest.mark.usefixtures("chemsmart_templates_config")
+@pytest.mark.parametrize(
+    "fragment_options",
+    [
+        ("-fi", "[[1,4-10],[2,3]]", "-fc", "[-1,1]", "-fm", "[2,-2]"),
+        (
+            "--fragment-ids",
+            "1,2,2,1,1,1,1,1,1,1",
+            "--fragment-charges",
+            "-1,1",
+            "--fragment-multiplicities",
+            "2,-2",
+        ),
+    ],
+    ids=["grouped-indices", "legacy-per-atom-ids"],
+)
+def test_frag_submission_replays_one_structure_per_script(
+    tmp_path,
+    monkeypatch,
+    server_yaml_file,
+    gaussian_yaml_settings_gas_solv_project_name,
+    mocker,
+    fragment_options,
+):
+    monkeypatch.chdir(tmp_path)
+    xyz = tmp_path / "fragments.xyz"
+    xyz.write_text(
+        "".join(
+            f"10\nFrame {frame}\n"
+            + "".join(f"H 0 0 {atom * separation}\n" for atom in range(10))
+            for frame, separation in enumerate((2, 3), start=1)
+        )
+    )
+    result = submit_for_test(
+        server_yaml_file,
+        "gaussian",
+        "-p",
+        gaussian_yaml_settings_gas_solv_project_name,
+        "-f",
+        xyz,
+        "--structure-index",
+        "1,2",
+        "-c",
+        "0",
+        "-m",
+        "1",
+        "frag",
+        "-j",
+        "opt",
+        *fragment_options,
+    )
+    assert result.exit_code == 0, result.exception
+    scripts = sorted(tmp_path.glob("chemsmart_run_*.py"))
+    assert len(scripts) == 2
+    run_job = mocker.patch.object(GaussianFragJob, "run", autospec=True)
+    for index, (separation, script) in enumerate(
+        zip((2, 3), scripts), start=1
+    ):
+        run_job.reset_mock()
+        node = run_generated_script_command(script)
+        assert node.exit_code == 0, node.exception
+        run_job.assert_called_once()
+        job = run_job.call_args.args[0]
+        assert job.molecule.positions[1, 2] == separation
+        assert job.settings.fragment_ids == [1, 2, 2] + [1] * 7
+        assert job.settings.fragment_charges == [-1, 1]
+        assert job.settings.fragment_multiplicities == [2, -2]
+        assert job.label == f"fragments_opt_frag_idx{index}"
+        assert script.stem == f"chemsmart_run_{job.execution_name}"
