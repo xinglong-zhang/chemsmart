@@ -67,6 +67,7 @@ class GaussianJobRunner(JobRunner):
 
     # List of supported Gaussian job types
     JOBTYPES = [
+        "g16frag",
         "g16crest",
         "g16job",
         "g16dias",
@@ -853,7 +854,17 @@ class FakeGaussian:
             g.write(
                 " Elapsed time:      0 days  0 hours  0 minutes  0.0 seconds.\n"
             )
-            g.write(
-                f" Normal termination of Gaussian 16 (fake executable) at "
+            termination = (
+                " Normal termination of Gaussian 16 (fake executable) at "
                 f"{datetime.now().strftime('%a %b %d %H:%M:%S %Y')}."
             )
+            continuations = sum(
+                line.lower() == "--link1--"
+                for line in self.input_object.contents
+            )
+            for step in range(2, continuations + 2):
+                g.write(f"{termination}\n")
+                g.write(
+                    f" Link1:  Proceeding to internal job step number {step:2d}.\n"
+                )
+            g.write(termination)

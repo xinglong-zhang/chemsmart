@@ -28,11 +28,12 @@ import typing as t
 
 import click
 from click import Context
+from click.core import ParameterSource
 
 logger = logging.getLogger(__name__)
 
 
-def _add_subcommand_info_to_ctx(ctx):
+def _add_subcommand_info_to_ctx(ctx, *, include_defaults=True):
     """
     Add subcommand information to the Click context object.
 
@@ -42,6 +43,7 @@ def _add_subcommand_info_to_ctx(ctx):
 
     Args:
         ctx (Context): Click context object containing command information.
+        include_defaults (bool): Include options supplied by Click defaults.
     """
     # Ensure ctx.obj is a mutable mapping (dict) so callers like MyGroup
     # and MyCommand can safely append subcommand metadata even when the
@@ -70,6 +72,10 @@ def _add_subcommand_info_to_ctx(ctx):
 
     subcommand["kwargs"] = {}
     for param, value in ctx.params.items():
+        if not include_defaults and (
+            ctx.get_parameter_source(param) == ParameterSource.DEFAULT
+        ):
+            continue
         subcommand["kwargs"][param] = {}
         subcommand["kwargs"][param]["value"] = value
         subcommand["kwargs"][param]["nargs"] = nargs[param]
@@ -126,6 +132,10 @@ class MyCommand(click.Command):
     mapping.
     """
 
+    def __init__(self, *args, include_defaults=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.include_defaults = include_defaults
+
     def invoke(self, ctx):
         """
         Record command invocation metadata, then delegate to Click.
@@ -136,7 +146,9 @@ class MyCommand(click.Command):
         Returns:
             Any: Result of `click.Command.invoke`.
         """
-        _add_subcommand_info_to_ctx(ctx)
+        _add_subcommand_info_to_ctx(
+            ctx, include_defaults=self.include_defaults
+        )
         return super().invoke(ctx)
 
 

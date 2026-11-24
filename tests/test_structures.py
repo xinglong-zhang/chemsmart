@@ -5759,7 +5759,7 @@ class TestMoleculeFilepathEdgeCases:
         assert result is not None
 
 
-class TestReadChemsmartDbfileDispatch:
+class TestReadDatabaseFileDispatch:
     """Isolate Molecule._read_chemsmart_dbfile's dispatch logic from
     DatabaseFile's own (separately, fully-tested) behavior via mocking."""
 

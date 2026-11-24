@@ -1672,3 +1672,116 @@ class TestGaussianInputWriterRouteSectionHeavyElementsBranches:
         content = buf.getvalue()
         assert "gen " in content or content.strip().endswith("gen")
         assert "genecp" not in content
+
+
+@pytest.mark.parametrize("multiplicities,total", [([2, -2], 1), ([2, 2], 3)])
+@pytest.mark.parametrize(
+    "stable,stable_route",
+    [
+        (True, "opt"),
+        (False, None),
+        ("noopt", "noopt"),
+        ("(opt,xqc)", "(opt,xqc)"),
+    ],
+)
+def test_fragment_input_steps(
+    fragment_settings, multiplicities, total, stable, stable_route
+):
+    settings = fragment_settings
+    settings.fragment_multiplicities = multiplicities
+    settings.multiplicity = total
+    settings.stable = stable
+    molecule = Molecule(symbols=["H", "H"], positions=[[0, 0, 0], [0, 0, 2]])
+    writer = make_gaussian_writer(settings, molecule)
+    buffer = io.StringIO()
+    writer._write_all(buffer)
+    sections = buffer.getvalue().split("--Link1--")
+    assert len(sections) == (3 if stable else 2)
+    assert (
+        f"0 {total} 0 {multiplicities[0]} 0 {multiplicities[1]}\n"
+        in sections[0]
+    )
+    assert "guess=(fragment=2,only)" in sections[0]
+    assert "Fragment=1" in sections[0] and "Fragment=2" in sections[0]
+    assert "scrf" not in sections[0] and "eps=" not in sections[0]
+    for section in sections[1:]:
+        assert "geom=check guess=read" in section
+        assert "Fragment=" not in section
+        assert "eps=7.55" in section
+        assert "%chk=testjob.chk" in section
+        assert f"\n0 {total}\n" in section
+    assert "opt freq" in sections[-1]
+    assert "stable=" not in sections[0]
+    assert "stable=" not in sections[-1]
+    if stable_route is not None:
+        assert f"stable={stable_route} geom=check guess=read" in sections[1]
+    assert "guess=mix" not in buffer.getvalue()
+    assert settings.functional == "mn15"
+    assert settings.jobtype == "opt" and settings.freq
+    assert settings.route_string in sections[0]
+    assert settings.link_route_string in sections[-1]
+
+
+def test_fragment_writer_preserves_frozen_atom_flags(
+    fragment_settings, fragment_input
+):
+    from chemsmart.io.gaussian.input import Gaussian16Input
+
+    fragment_input.write_text(
+        fragment_input.read_text().replace(
+            "H(Fragment=2) 0.0", "H(Fragment=2) -1 0.0"
+        )
+    )
+    molecule = Gaussian16Input(str(fragment_input)).molecule
+    assert molecule.frozen_atoms == [0, -1]
+
+    buffer = io.StringIO()
+    make_gaussian_writer(fragment_settings, molecule)._write_all(buffer)
+    sections = buffer.getvalue().split("--Link1--")
+    coordinates = [
+        line.split()[:2]
+        for line in sections[0].splitlines()
+        if line.startswith("H(Fragment=")
+    ]
+    assert coordinates == [["H(Fragment=1)", "0"], ["H(Fragment=2)", "-1"]]
+    assert "geom=check guess=read" in sections[-1]
+
+
+@pytest.mark.parametrize("jobtype", ["scan", "modred", "ircf", "ircr"])
+def test_fragment_continuation_jobtypes(fragment_settings, jobtype):
+    fragment_settings.jobtype = jobtype
+    if jobtype == "scan":
+        fragment_settings.modred = {
+            "coords": [[1, 2]],
+            "num_steps": [3],
+            "step_size": [0.1],
+        }
+    elif jobtype == "modred":
+        fragment_settings.modred = [[1, 2]]
+    molecule = Molecule(symbols=["H", "H"], positions=[[0, 0, 0], [0, 0, 2]])
+    buffer = io.StringIO()
+    make_gaussian_writer(fragment_settings, molecule)._write_all(buffer)
+    sections = buffer.getvalue().split("--Link1--")
+    assert "opt=modredundant" not in sections[0]
+    assert "opt=modredundant" not in sections[1]
+    if jobtype in {"scan", "modred"}:
+        assert "opt=modredundant" in sections[-1]
+        assert "1 2" in sections[-1]
+    else:
+        assert "irc(" not in sections[0]
+        assert "irc(" not in sections[1]
+        direction = "forward" if jobtype == "ircf" else "reverse"
+        assert direction in sections[-1]
+        assert "irc(" in sections[-1]
+
+
+def test_fragment_td_preserves_excited_state_settings(fragment_settings):
+    fragment_settings.jobtype = "td"
+    fragment_settings.nstates = 7
+    fragment_settings.root = 2
+    molecule = Molecule(symbols=["H", "H"], positions=[[0, 0, 0], [0, 0, 2]])
+    buffer = io.StringIO()
+    make_gaussian_writer(fragment_settings, molecule)._write_all(buffer)
+    sections = buffer.getvalue().split("--Link1--")
+    assert "TD(" not in sections[0] and "TD(" not in sections[1]
+    assert "nstates=7,root=2" in sections[-1]

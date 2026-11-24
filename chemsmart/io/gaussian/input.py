@@ -1,3 +1,4 @@
+import re
 from functools import cached_property
 
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
@@ -56,6 +57,32 @@ class Gaussian16Input(GaussianFileMixin):
 
         cb = CoordinateBlock(coordinate_block=self.content_groups[2])
         return cb
+
+    @property
+    def fragment_ids(self):
+        """Return per-atom fragment IDs from the first geometry block."""
+        ids = []
+        for line in self.content_groups[2][1:]:
+            if not line.strip():
+                continue
+            match = re.search(r"\bfragment\s*=\s*(\d+)", line, re.IGNORECASE)
+            ids.append(int(match.group(1)) if match else None)
+        return ids if any(value is not None for value in ids) else None
+
+    @property
+    def fragment_charge_multiplicities(self):
+        """Read fragment charge/signed-multiplicity pairs, excluding total."""
+        if self.fragment_ids is None:
+            return None
+        try:
+            values = list(map(int, self.content_groups[2][0].split()))
+        except ValueError as exc:
+            raise ValueError(
+                "Fragment charges and multiplicities must be integers."
+            ) from exc
+        if len(values) < 6 or len(values) % 2:
+            raise ValueError("Incomplete fragment charge/multiplicity line.")
+        return list(zip(values[2::2], values[3::2]))
 
     @property
     def modredundant_group(self):

@@ -392,6 +392,8 @@ Other Jobs
       -  Run Gaussian input file as-is
    -  -  ``link``
       -  Multi-step link jobs
+   -  -  ``frag``
+      -  Build a fragment initial guess, check stability and run a continuation task.
    -  -  ``userjob``
       -  Custom user-defined jobs
 
@@ -413,4 +415,5 @@ For detailed information on each job type:
 -  :doc:`gaussian-qrc`
 -  :doc:`gaussian-electronic-structure`
 -  :doc:`gaussian-other-jobs`
+-  :ref:`gaussian-fragment-jobs`
 -  :doc:`gaussian-qmmm-jobs`

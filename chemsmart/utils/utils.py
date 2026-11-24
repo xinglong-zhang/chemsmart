@@ -277,7 +277,7 @@ def write_list_of_lists_as_a_string_with_empty_line_between_lists(
     return string
 
 
-def get_list_from_string_range(string_of_range):
+def get_list_from_string_range(string_of_range, *, max_index=None):
     """
     Parse 1-indexed index ranges from a string.
 
@@ -292,6 +292,7 @@ def get_list_from_string_range(string_of_range):
 
     Args:
         string_of_range: Range specification string.
+        max_index: Optional largest atom index. Checked before expanding ranges.
 
     Returns:
         list: 1-indexed integer indices.
@@ -332,34 +333,31 @@ def get_list_from_string_range(string_of_range):
             if ":" in token:
                 start_s, end_s = token.split(":", 1)
                 start, end = int(start_s), int(end_s)
-                if start <= 0 or end <= 0 or start > end:
-                    raise ValueError(
-                        f"Invalid atom index range {token!r}. "
-                        "Expected 1-indexed ranges such as '1-10,15' or '1:10 15'."
-                    )
-                indices.extend(range(start, end + 1))
             elif "-" in token and not token.startswith("-"):
                 start_s, end_s = token.split("-", 1)
                 start, end = int(start_s), int(end_s)
-                if start <= 0 or end <= 0 or start > end:
-                    raise ValueError(
-                        f"Invalid atom index range {token!r}. "
-                        "Expected 1-indexed ranges such as '1-10,15' or '1:10 15'."
-                    )
-                indices.extend(range(start, end + 1))
             else:
-                value = int(token)
-                if value <= 0:
-                    raise ValueError(
-                        f"Invalid atom index {token!r}. "
-                        "Expected 1-indexed indices such as '1,15' or '15'."
-                    )
-                indices.append(value)
+                start = end = int(token)
         except ValueError:
             raise ValueError(
                 f"Invalid atom index token {token!r} in {original!r}. "
                 "Expected 1-indexed ranges such as '1-10,15' or '1:10 15'."
             ) from None
+        if start > end:
+            raise ValueError(
+                f"Invalid atom index token {token!r}. "
+                f"The range start {start} exceeds its end {end}."
+            )
+        if max_index is None and start < 1:
+            raise ValueError(
+                f"Invalid atom index token {token!r}. Atom indices start at 1."
+            )
+        if max_index is not None and (start < 1 or end > max_index):
+            raise ValueError(
+                f"Atom index or range {token!r} is out of bounds. "
+                f"This structure has {max_index} atoms (valid indices 1 through {max_index})."
+            )
+        indices.extend(range(start, end + 1))
 
     if not indices:
         raise ValueError(

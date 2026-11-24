@@ -11,11 +11,13 @@ The writer supports both standard job types and link jobs with
 multiple calculation steps.
 """
 
+import copy
 import logging
 import os.path
 
 from chemsmart.io.molecules.structure import QMMMMolecule
 from chemsmart.jobs.gaussian.settings import (
+    GaussianFragJobSettings,
     GaussianLinkJobSettings,
     GaussianQMMMJobSettings,
 )
@@ -96,15 +98,62 @@ class GaussianInputWriter(InputWriter):
         Args:
             f (file): Open file object to write to.
         """
+        if isinstance(self.settings, GaussianFragJobSettings):
+            self._write_fragment_sections(f)
+            return
+
+        self._write_calculation(f)
+
+    def _write_fragment_sections(self, f):
+        """Write fragment guess and checkpoint continuations with shared sections."""
+        self.settings.validate_fragments(self.job.molecule)
+        for index, settings in enumerate(self.settings.calculation_steps()):
+            if index:
+                f.write("\n--Link1--\n")
+            step_job = copy.copy(self.job)
+            step_job.settings = settings
+            writer = GaussianInputWriter(step_job)
+            writer._write_calculation(
+                f,
+                fragment_settings=self.settings if index == 0 else None,
+                read_geometry=index > 0,
+            )
+
+    def _write_fragment_charge_and_multiplicity(self, f, settings):
+        """Write total and ordered fragment charge/signed-multiplicity pairs."""
+        values = [self.settings.charge, self.settings.multiplicity]
+        for charge, multiplicity in zip(
+            settings.fragment_charges, settings.fragment_multiplicities
+        ):
+            values.extend([charge, multiplicity])
+        f.write(" ".join(map(str, values)) + "\n")
+
+    def _write_calculation(
+        self, f, fragment_settings=None, read_geometry=False
+    ):
+        """Write one calculation, optionally reading geometry from checkpoint."""
+
         logger.debug("Starting complete input file generation")
         self._write_gaussian_header(f)
         self._write_route_section(f)
         self._write_gaussian_title(f)
-        if isinstance(self.settings, GaussianQMMMJobSettings):
+        if fragment_settings is not None:
+            self._write_fragment_charge_and_multiplicity(f, fragment_settings)
+        elif isinstance(self.settings, GaussianQMMMJobSettings):
             self._write_charge_and_multiplicity_qmmm(f)
         else:
             self._write_charge_and_multiplicity(f)
-        self._write_cartesian_coordinates(f)
+        if read_geometry:
+            f.write("\n")
+        elif fragment_settings is not None:
+            self.job.molecule.write_coordinates(
+                f,
+                program="gaussian",
+                fragment_ids=fragment_settings.fragment_ids,
+            )
+            f.write("\n")
+        else:
+            self._write_cartesian_coordinates(f)
         if isinstance(self.settings, GaussianQMMMJobSettings):
             self._append_qmmm_connectivity(f)
 

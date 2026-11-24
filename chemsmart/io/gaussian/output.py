@@ -39,6 +39,7 @@ from chemsmart.utils.utils import (
 
 p = PeriodicTable()
 logger = logging.getLogger(__name__)
+_NORMAL_TERMINATION = "Normal termination of Gaussian"
 
 
 class Gaussian16Output(GaussianFileMixin):
@@ -88,13 +89,21 @@ class Gaussian16Output(GaussianFileMixin):
         for line in reversed(contents):
             if not line:
                 continue
-            if "Normal termination of Gaussian" in line:
+            if _NORMAL_TERMINATION in line:
                 logger.debug(f"File {self.filename} terminated normally.")
                 return True
             break
 
         logger.debug(f"File {self.filename} has error termination.")
         return False
+
+    @property
+    def normal_termination_count(self):
+        """Count normally terminated Gaussian calculations in a Link1 log."""
+        return sum(
+            line.lstrip().startswith(_NORMAL_TERMINATION)
+            for line in self.contents
+        )
 
     @property
     def heavy_elements(self):

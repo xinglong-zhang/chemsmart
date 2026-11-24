@@ -1999,7 +1999,7 @@ class Molecule:
 
         return rdkit_mol
 
-    def write_coordinates(self, f, program=None):
+    def write_coordinates(self, f, program=None, *, fragment_ids=None):
         """
         Write molecular coordinates to file in specified format.
 
@@ -2007,6 +2007,8 @@ class Molecule:
             f (file): File object to write coordinates to
             program (str, optional): Format to use
             ('gaussian' or 'orca'). Default 'gaussian'
+            fragment_ids (sequence of int, optional): Per-atom Gaussian
+                fragment labels.
 
         Raises:
             ValueError: If program format is not supported
@@ -2016,8 +2018,18 @@ class Molecule:
         """
         if program is None:
             program = "gaussian"  # use gaussian format by default
+        if fragment_ids is not None:
+            if program.lower() != "gaussian":
+                raise ValueError(
+                    "Fragment labels require Gaussian coordinates."
+                )
+            if len(fragment_ids) != self.num_atoms:
+                raise ValueError("Provide exactly one fragment ID per atom.")
         if program.lower() == "gaussian":
-            self._write_gaussian_coordinates(f)
+            if fragment_ids is None:
+                self._write_gaussian_coordinates(f)
+            else:
+                self._write_gaussian_coordinates(f, fragment_ids=fragment_ids)
             self._write_gaussian_pbc_coordinates(f)
         elif program.lower() == "orca":
             self._write_orca_coordinates(f)
@@ -2365,7 +2377,7 @@ class Molecule:
                     f"{filename}: {exc}"
                 ) from exc
 
-    def _write_gaussian_coordinates(self, f):
+    def _write_gaussian_coordinates(self, f, *, fragment_ids=None):
         """
         Write coordinates in Gaussian format.
         """
@@ -2373,18 +2385,19 @@ class Molecule:
         assert (
             self.positions is not None
         ), "Positions to write should not be None!"
-        if self.frozen_atoms is None or len(self.frozen_atoms) == 0:
-            for i, (s, (x, y, z)) in enumerate(
-                zip(self.chemical_symbols, self.positions)
-            ):
-                f.write(f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}\n")
-        else:
-            for i, (s, (x, y, z)) in enumerate(
-                zip(self.chemical_symbols, self.positions)
-            ):
-                f.write(
-                    f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}\n"
-                )
+        frozen_atoms = self.frozen_atoms
+        has_freeze_flags = frozen_atoms is not None and len(frozen_atoms) > 0
+        for index, (symbol, (x, y, z)) in enumerate(
+            zip(self.chemical_symbols, self.positions)
+        ):
+            label = symbol
+            if fragment_ids is not None:
+                label = f"{symbol}(Fragment={fragment_ids[index]})"
+            if has_freeze_flags:
+                atom = f"{label:6} {frozen_atoms[index]:5}"
+            else:
+                atom = f"{label:5}"
+            f.write(f"{atom} {x:15.10f} {y:15.10f} {z:15.10f}\n")
 
     def _write_gaussian_pbc_coordinates(self, f):
         """
@@ -3703,6 +3716,7 @@ class CoordinateBlock:
                 line_elements[4]
             ).strip() in ("H", "M", "L")
 
+            constraint = 0
             x_coordinate = 0.0
             y_coordinate = 0.0
             z_coordinate = 0.0
@@ -3714,7 +3728,7 @@ class CoordinateBlock:
                 ):
                     # Frozen coordinate line: second
                     # token is an explicit -1/0 flag
-                    constraints.append(second_val_int)
+                    constraint = second_val_int
                     x_coordinate = float(line_elements[2])
                     y_coordinate = float(line_elements[3])
                     z_coordinate = float(line_elements[4])
@@ -3740,6 +3754,7 @@ class CoordinateBlock:
                 z_coordinate = float(line_elements[3])
             position = [x_coordinate, y_coordinate, z_coordinate]
             positions.append(position)
+            constraints.append(constraint)
         if any(len(i) == 0 for i in [atomic_numbers, positions]):
             raise ValueError(
                 f"No atomic numbers or positions found in the coordinate block: {self.coordinate_block}!"

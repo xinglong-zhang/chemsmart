@@ -3453,3 +3453,29 @@ class TestFromDatabase:
                     record_index=1,
                     structure_index="5",
                 )
+
+
+@pytest.mark.parametrize(
+    "updates,match",
+    [
+        ({"fragment_ids": [1]}, "one fragment ID"),
+        ({"fragment_ids": [1, 3]}, "consecutive"),
+        ({"fragment_ids": [None, 2]}, "Atom 1 is missing a fragment ID"),
+        ({"fragment_charges": [1, 0]}, "sum"),
+        ({"fragment_multiplicities": [1, -1]}, "incompatible"),
+        ({"fragment_multiplicities": [2, 2]}, "total multiplicity"),
+        ({"chk": False}, "checkpoint"),
+        ({"stable": "opt scrf=water"}, "Use one Stable option"),
+        ({"additional_route_parameters": "guess(mix)"}, "frag controls"),
+        ({"additional_route_parameters": "Stable"}, "frag controls"),
+        (
+            {"additional_route_parameters": "scrf=(smd,solvent=water)"},
+            "frag controls",
+        ),
+    ],
+)
+def test_invalid_fragments(fragment_settings, updates, match):
+    settings = fragment_settings.merge(updates, merge_all=True)
+    molecule = Molecule(symbols=["H", "H"], positions=[[0, 0, 0], [0, 0, 2]])
+    with pytest.raises(ValueError, match=match):
+        settings.validate_fragments(molecule)

@@ -227,6 +227,18 @@ def click_gaussian_jobtype_options(f):
     return wrapper_common_options
 
 
+def click_gaussian_stability_option(f):
+    """Select the value of Gaussian's Stable keyword."""
+    return click.option(
+        "-st",
+        "--stable",
+        type=str,
+        default="opt",
+        show_default=True,
+        help="Gaussian stability options. See https://gaussian.com/stable/.",
+    )(f)
+
+
 def click_gaussian_solvent_options(f):
     """Common click options for Gaussian solvent settings."""
 
@@ -791,7 +803,9 @@ def gaussian(
                 label = f"{label}_RID-{record_id}"
             elif record_index is not None:
                 label = f"{label}_RI-{record_index}"
-        label = f"{label}_{ctx.invoked_subcommand}"
+        # The fragment command places its workflow suffix after the job type.
+        if ctx.invoked_subcommand != "frag":
+            label = f"{label}_{ctx.invoked_subcommand}"
     label = clean_label(label)
 
     # if user has specified an index to use to access particular structure
