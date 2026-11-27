@@ -132,7 +132,10 @@ orca: gas_solv
         assert isinstance(job, ChainJob)
         assert job.PROGRAM == "chain"
         assert job.programs == ("crest", "xtb", "gaussian", "orca")
-        assert job.label == "crest_best"
+        assert job.label.startswith("crest_best_00_crest_conformers_")
+        assert "_01_xtb_opt_" in job.label
+        assert "_02_gaussian_opt_" in job.label
+        assert "_03_orca_sp_" in job.label
         assert [phase.name for phase in job.phases] == [
             "00_crest_conformers",
             "01_xtb_opt",
@@ -255,9 +258,14 @@ orca: gas_solv
             catch_exceptions=False,
         )
         assert result.exit_code == 0, result.output
-        submit_script = tmp_path / "chemsmart_sub_crest_best.sh"
-        run_script = tmp_path / "chemsmart_run_crest_best.py"
-        assert submit_script.exists()
+        submit_scripts = list(
+            tmp_path.glob("chemsmart_sub_chain_crest_best_*.sh")
+        )
+        assert len(submit_scripts) == 1, sorted(tmp_path.glob("chemsmart_*"))
+        submit_script = submit_scripts[0]
+        run_script = tmp_path / submit_script.name.replace(
+            "chemsmart_sub_", "chemsmart_run_"
+        ).replace(".sh", ".py")
         assert run_script.exists()
         submit_text = submit_script.read_text()
         assert submit_text.count("conda activate") == 1

@@ -3,6 +3,7 @@
 import logging
 import os
 import shlex
+import tempfile
 from dataclasses import dataclass, replace
 from typing import Callable, Sequence
 
@@ -798,11 +799,46 @@ def _jobs_from_cli_result(result):
     return jobs
 
 
+def _option_value(step, *names):
+    """Return the value of the first matching option in a chain step."""
+    tokens = step.extra_option_tokens + step.suffix_option_tokens
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token in names and index + 1 < len(tokens):
+            return tokens[index + 1]
+        for name in names:
+            prefix = f"{name}="
+            if token.startswith(prefix):
+                return token[len(prefix) :]
+        index += 1
+    return None
+
+
 def _step_slug(step):
     """Drop duplicate "thermochemistry" from the slug."""
     if step.program == "thermochemistry":
         return step.program
     return f"{step.program}_{step.job}"
+
+
+def _join_step_labels(stem, labels):
+    """One chain label from the stem and each step job label.
+
+    ``ts7p_ts`` plus ``ts7p_ts_00_gaussian_ircr`` becomes
+    ``ts7p_ts_00_gaussian_ircr``. Further step labels append the part
+    after the stem.
+    """
+    parts = []
+    prefix = f"{stem}_"
+    for label in labels:
+        if label.startswith(prefix):
+            parts.append(label[len(prefix) :])
+        elif label != stem:
+            parts.append(label)
+    if not parts:
+        return stem
+    return prefix + "_".join(parts)
 
 
 def _child_label(chain_label, index, step, ordinal, count, kind):
@@ -895,13 +931,108 @@ class ChainPipelineBuilder:
         )
         return ChainJob(
             molecule=parent,
-            label=self.context.label,
+            label=self._submission_label(),
             jobrunner=self.context.jobrunner,
             skip_completed=self.context.skip_completed,
             phases=self.phases,
             programs=external_programs,
             **kwargs,
         )
+
+    def _submission_label(self):
+        """Chain label built from each step's own job label.
+
+        A standalone IRC reverse job is ``{stem}_ircr``. The chain step is
+        ``{stem}_00_gaussian_ircr``, and that text is part of the chain
+        label. Later steps are appended the same way.
+        """
+        labels = []
+        for index, step in enumerate(self._prepared):
+            labels.extend(self._submission_step_labels(index, step))
+        return _join_step_labels(self.context.label, labels)
+
+    def _submission_step_labels(self, index, step):
+        if step.program == "thermochemistry":
+            return [self._thermochemistry_submission_label(step, index)]
+        if step.program == "grouper":
+            return [f"{self.context.label}_{index:02d}_grouper_{step.job}"]
+        if self._needs_conformers_file(step):
+            return [self._gaussian_crest_submission_label(step, index)]
+        if step.job == "qrc":
+            # QRC checks vibrational modes while the job is built, and the
+            # chain does not have those modes until the previous step finishes.
+            return [self._fallback_step_label(index, step)]
+        try:
+            return self._preview_step_labels(index, step)
+        except (OSError, ValueError):
+            logger.debug(
+                "Could not preview the label for %s:%s; using the step slug.",
+                step.program,
+                step.job,
+                exc_info=True,
+            )
+            return [self._fallback_step_label(index, step)]
+
+    def _gaussian_crest_submission_label(self, step, index):
+        """Match ``gaussian:crest -j JOBTYPE`` labels, ``{stem}_{jobtype}``."""
+        jobtype = _option_value(step, "-j", "--jobtype")
+        if jobtype:
+            return f"{self.context.label}_{jobtype}"
+        return self._fallback_step_label(index, step)
+
+    def _thermochemistry_submission_label(self, step, index):
+        _settings, params = self._thermochemistry[index]
+        child_label = _child_label(
+            self.context.label, index, step, ordinal=1, count=1, kind=None
+        )
+        user_label = params.get("label")
+        append_label = params.get("append_label")
+        if user_label:
+            return user_label
+        if append_label:
+            return f"{child_label}_{append_label}"
+        return child_label
+
+    def _fallback_step_label(self, index, step):
+        return _child_label(
+            self.context.label, index, step, ordinal=1, count=1, kind=None
+        )
+
+    def _preview_step_labels(self, index, step):
+        """Job labels for this step, using the same CLI label rules."""
+        molecules = (
+            tuple(self.context.molecules)
+            if index == 0
+            else (self.context.molecules[-1],)
+        )
+        prepared = []
+        for molecule in molecules:
+            preview = molecule.copy()
+            if index > 0:
+                if self.context.charge is not None:
+                    preview.charge = self.context.charge
+                if self.context.multiplicity is not None:
+                    preview.multiplicity = self.context.multiplicity
+            prepared.append(preview)
+        path = None
+        try:
+            handle = tempfile.NamedTemporaryFile(suffix=".xyz", delete=False)
+            path = handle.name
+            handle.close()
+            prepared[0].write_xyz(path, mode="w")
+            kind = "idx" if index == 0 and len(prepared) > 1 else None
+            handoff = HandoffResult(
+                molecules=tuple(prepared),
+                sources=tuple((path, None) for _ in prepared),
+                label_kind=kind,
+            )
+            jobs = self._program_jobs(step, handoff, index)
+        finally:
+            if path is not None and os.path.exists(path):
+                os.remove(path)
+        if not jobs:
+            return [self._fallback_step_label(index, step)]
+        return [job.label for job in jobs]
 
     def _validate_pipeline(self, steps):
         parser = ChainStepParser()
@@ -1269,8 +1400,11 @@ def build_chain_job(
             none; each child stores its own. Each structure selected by
             ``-i`` needs ``structure_index_in_file`` set to its 1-based
             index in the file.
-        label (str): Chain label; children are
-            ``{label}_{index:02d}_{program}_{job}``.
+        label (str): Stem for child jobs. Each child is
+            ``{label}_{index:02d}_{program}_{job}``, plus the suffix that
+            job would add on its own (IRC reverse is ``ircr``, for
+            example). The chain job label is those step labels joined, so
+            a reverse IRC step contributes ``{label}_00_gaussian_ircr``.
         charge (int, optional): Chain-level charge override.
         multiplicity (int, optional): Chain-level multiplicity override.
         jobrunner: Runner assigned to the parent ``ChainJob``.

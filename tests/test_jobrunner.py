@@ -165,6 +165,31 @@ class TestProgramAwareNames:
         )
         assert job.label == Path(expected_filename).stem
 
+    def test_chain_scratch_is_nested_under_the_chain_name(
+        self, pbs_server, tmp_path
+    ):
+        """Child scratch follows the chain label, then the step label."""
+        parent = JobRunner(
+            server=pbs_server, scratch=True, scratch_dir=str(tmp_path)
+        )
+        parent.chain_execution_name = "chain_ts7p_ts_00_gaussian_ircr"
+        child = Job(
+            molecule=None, label="ts7p_ts_01_gaussian_opt", jobrunner=None
+        )
+        child.PROGRAM = "Gaussian"
+        child.TYPE = "g16opt"
+
+        Job._propagate_runner(parent, child)
+        child.jobrunner._set_up_variables_in_scratch(child)
+
+        expected = (
+            tmp_path
+            / "chain_ts7p_ts_00_gaussian_ircr"
+            / "gaussian_ts7p_ts_01_gaussian_opt"
+        )
+        assert Path(child.jobrunner.running_directory) == expected
+        assert child.label == "ts7p_ts_01_gaussian_opt"
+
 
 class TestJobRunnerSelection:
     def test_fake_gaussian_runner_selected_when_fake_enabled(self, pbs_server):

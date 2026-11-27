@@ -145,6 +145,13 @@ class Job(RegistryMixin):
             child_runner.mem_gb = mem_gb
         if num_gpus is not None:
             child_runner.num_gpus = num_gpus
+        chain_name = runner.chain_execution_name
+        if chain_name and child_runner.scratch:
+            root = child_runner.scratch_dir
+            if root:
+                nested = os.path.join(root, chain_name)
+                os.makedirs(nested, exist_ok=True)
+                child_runner.scratch_dir = nested
         job.jobrunner = child_runner
         return child_runner
 

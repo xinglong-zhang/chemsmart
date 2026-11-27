@@ -133,6 +133,8 @@ class ChainMixin:
         phase.run(parent_runner=self.jobrunner, logger_obj=logger)
 
     def _run(self, **kwargs):
+        if self.PROGRAM == "chain" and self.jobrunner is not None:
+            self.jobrunner.chain_execution_name = self.execution_name
         for phase in self._phases:
             if phase.should_skip():
                 continue

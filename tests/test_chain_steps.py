@@ -449,7 +449,6 @@ class TestBuildChainJob:
                 molecules=mol,
                 label="mol",
             )
-            assert chain.label == "mol"
             assert chain.PROGRAM == "chain"
             assert chain.programs == (program,)
             assert len(chain.phases) == 1
@@ -457,6 +456,7 @@ class TestBuildChainJob:
             children = chain.phases[0].resolve_jobs()
             assert len(children) == 1
             child = children[0]
+            assert chain.label == child.label
             assert isinstance(child, job_class)
             assert child.label.startswith("mol_00_")
             assert child.settings.charge == 0
@@ -477,7 +477,63 @@ class TestBuildChainJob:
         child = chain.phases[0].resolve_jobs()[0]
         assert isinstance(child, GaussianIRCJob)
         assert child.label == "mol_00_gaussian_irc"
+        assert chain.label == "mol_00_gaussian_irc"
         assert child.settings.charge == 0
+
+    def test_chain_label_follows_each_step_job_label(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        settings = _chain_settings(gaussian="gas_solv")
+        reverse = build_chain_job(
+            settings,
+            steps=(
+                ChainStep(
+                    program="gaussian",
+                    job="irc",
+                    suffix_option_tokens=("-d", "reverse"),
+                ),
+                ChainStep(program="gaussian", job="opt"),
+                ChainStep(program="gaussian", job="sp"),
+            ),
+            molecules=_h2(),
+            label="ts7p_ts",
+            charge=0,
+            multiplicity=1,
+        )
+        forward = build_chain_job(
+            settings,
+            steps=(
+                ChainStep(
+                    program="gaussian",
+                    job="irc",
+                    suffix_option_tokens=("-d", "forward"),
+                ),
+                ChainStep(program="gaussian", job="opt"),
+                ChainStep(program="gaussian", job="sp"),
+            ),
+            molecules=_h2(),
+            label="ts7p_ts",
+            charge=0,
+            multiplicity=1,
+        )
+        sp = build_chain_job(
+            settings,
+            steps=(ChainStep(program="gaussian", job="sp"),),
+            molecules=_h2(),
+            label="ts7p_ts",
+            charge=0,
+            multiplicity=1,
+        )
+        sp_suffix = sp.label.removeprefix("ts7p_ts_00_gaussian_")
+        assert reverse.phases[0].resolve_jobs()[0].label == (
+            "ts7p_ts_00_gaussian_ircr"
+        )
+        assert reverse.label == (
+            "ts7p_ts_00_gaussian_ircr_01_gaussian_opt_02_gaussian_" + sp_suffix
+        )
+        assert forward.label == reverse.label.replace(
+            "_00_gaussian_ircr_", "_00_gaussian_ircf_"
+        )
 
     def test_duplicate_steps_get_unique_labels(
         self, isolated_config_dir, temporary_working_dir
