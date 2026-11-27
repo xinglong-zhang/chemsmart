@@ -2,7 +2,6 @@ import os
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.mol.movie import PyMOLMovieJob
-from chemsmart.jobs.runner import JobRunner
 
 
 class PyMOLIRCMovieJob(PyMOLMovieJob):
@@ -118,21 +117,11 @@ class PyMOLIRCMovieJob(PyMOLMovieJob):
                 "full irc file."
             )
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecules=molecules,
-                    label=label,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecules=molecules, label=label, jobrunner=jobrunner, **kwargs
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                molecules=molecules,
+                label=label,
+            ),
+            **kwargs,
         )

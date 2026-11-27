@@ -127,6 +127,13 @@ computational chemistry software.
 
    thermochemistry-analysis
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Descriptors
+
+   soap-descriptors
+   sterimol-parameters
+
 ..
    .. toctree::
       :maxdepth: 2

@@ -128,3 +128,16 @@ To generate a separate file for each valid combination (useful for subsequent di
 
 This will: 1. Use 4 parallel processes to speed up generation. 2. Save each generated molecule as an individual file in
 ``./output_dir``.
+
+Submit to a Compute Node
+========================
+
+To run the generation on a compute node, use ``chemsmart sub`` with the same options:
+
+.. code:: bash
+
+   chemsmart sub -s SERVER iterate -f my_config.toml -o results -np 4
+
+Nothing is generated when you submit. The job is named after the configuration file, and the output is written relative
+to the submission folder. Your ``server.yaml`` needs no extra section, but submit from the Python environment where
+CHEMSMART is installed, because the job uses that same environment.

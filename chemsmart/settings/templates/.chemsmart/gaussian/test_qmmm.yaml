@@ -1,10 +1,12 @@
 # Default Gaussian QMMM settings for test calculations
 qmmm:
+  dieze_tag: p  # comment/remove if not using
   high_level_functional: mn15
   high_level_basis: genecp
   medium_level_functional: b3lyp
   medium_level_basis: 6-31g
 solv:
+  dieze_tag: p  # comment/remove if not using
   functional: mn15
   basis: def2qzvp
   freq: False

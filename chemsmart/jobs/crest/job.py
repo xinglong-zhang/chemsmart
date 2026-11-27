@@ -18,6 +18,21 @@ class CRESTJob(Job):
     def __init__(
         self, molecule, settings=None, label=None, jobrunner=None, **kwargs
     ):
+        """Initialize a CREST job with the given molecule and settings."""
+        # Validated before self.label/folder are set (CRESTJob's
+        # _determine_folder() depends on self.label, so it can't be
+        # computed from an unvalidated molecule and self isn't yet
+        # safely representable for an f-string).
+        if not isinstance(settings, CRESTJobSettings):
+            raise ValueError(
+                f"Settings must be instance of {CRESTJobSettings}, "
+                f"but is {settings} instead!"
+            )
+        if not isinstance(molecule, Molecule):
+            raise ValueError(
+                f"Molecule must be instance of Molecule, but is {molecule} instead!"
+            )
+
         if label is None:
             label = molecule.get_chemical_formula(empirical=True)
         self.label = label
@@ -25,17 +40,6 @@ class CRESTJob(Job):
         super().__init__(
             molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
         )
-
-        if not isinstance(settings, CRESTJobSettings):
-            raise ValueError(
-                f"Settings must be instance of {CRESTJobSettings} for {self}, "
-                f"but is {settings} instead!"
-            )
-        if not isinstance(molecule, Molecule):
-            raise ValueError(
-                f"Molecule must be instance of Molecule for {self}, but is "
-                f"{molecule} instead!"
-            )
 
         self.molecule = molecule.copy()
         self.settings = settings.copy()
@@ -77,10 +81,11 @@ class CRESTJob(Job):
         return os.path.join(self.folder, "crest_rotamers.xyz")
 
     def _determine_folder(self):
+        # Only compute the path: constructing a job must not touch the
+        # filesystem. The job runner creates the folder in _prerun().
         folder = os.path.abspath(os.getcwd())
         if self.label:
             folder = os.path.join(folder, self.label)
-            os.makedirs(folder, exist_ok=True)
         return folder
 
     def base_folder(self):

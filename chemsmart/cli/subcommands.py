@@ -8,6 +8,7 @@ from chemsmart.cli.iterate import iterate
 from chemsmart.cli.mol import mol
 from chemsmart.cli.nciplot import nciplot
 from chemsmart.cli.orca import orca
+from chemsmart.cli.sterimol import sterimol
 from chemsmart.cli.thermochemistry import thermochemistry
 from chemsmart.cli.xtb import xtb
 
@@ -21,6 +22,7 @@ subcommands = [
     chain,
     mol,
     nciplot,
+    sterimol,
     thermochemistry,
     database,
     iterate,

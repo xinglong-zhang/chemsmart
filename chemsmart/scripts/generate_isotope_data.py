@@ -117,9 +117,9 @@ def parse_isotope_file(filename):
     return isotopes
 
 
-if __name__ == "__main__":
-    input_file = Path(__file__).parent / "../utils/isotopes.txt"
-    output_file = Path(__file__).parent / "../utils/isotopes_data.py"
+def generate_isotope_data_file(input_file, output_file):
+    """Parse ``input_file`` and write the ``isotopes`` dict literal to
+    ``output_file`` as an importable Python module."""
 
     isotopes = parse_isotope_file(input_file)
 
@@ -174,3 +174,9 @@ isotopes = {\n''')
                 )
             f.write("    },\n")
         f.write("}\n")
+
+
+if __name__ == "__main__":
+    input_file = Path(__file__).parent / "../utils/isotopes.txt"
+    output_file = Path(__file__).parent / "../utils/isotopes_data.py"
+    generate_isotope_data_file(input_file, output_file)

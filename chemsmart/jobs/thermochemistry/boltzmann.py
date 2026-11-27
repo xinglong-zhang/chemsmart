@@ -10,7 +10,6 @@ import logging
 import os
 from typing import Type
 
-from chemsmart.jobs.runner import JobRunner
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 
@@ -141,22 +140,11 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
             BoltzmannAverageThermochemistryJob: Configured job instance
         """
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    files=files,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            files=files,
-            jobrunner=jobrunner,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                files=files,
+            ),
             **kwargs,
         )
 

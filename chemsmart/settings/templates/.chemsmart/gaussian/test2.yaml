@@ -1,5 +1,6 @@
 # Default Gaussian settings for calculations
 gas:
+  dieze_tag: p  # comment/remove if not using
   functional: b3lyp  # quotes required for string with spaces
   basis: genecp
   additional_route_parameters: empiricaldispersion=gd3bj
@@ -7,6 +8,7 @@ gas:
   heavy_elements_basis: def2-TZVPPD
   light_elements_basis: def2-SVP
 solv:
+  dieze_tag: p  # comment/remove if not using
   functional: b3lyp
   freq: False
   basis: def2qzvp

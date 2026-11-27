@@ -66,6 +66,12 @@ class GrouperJobRunner(JobRunner):
         try:
             grouper = self._create_grouper(job)
             groups, group_indices = grouper.group()
+            if not groups:
+                raise ValueError(
+                    f"{job.grouping_strategy} grouping produced no groups: "
+                    f"none of the {job.num_molecules} structures could be "
+                    "processed. See the log for the reason."
+                )
             job._grouper = grouper
             job._groups = groups
             job._group_indices = group_indices
@@ -219,7 +225,11 @@ class GrouperJobRunner(JobRunner):
         )
 
     def _run(self, process, **kwargs):
-        pass
+        """Fail the job when grouping failed, so that a scheduler sees it."""
+        if process != 0:
+            raise RuntimeError(
+                "Grouping failed. The reason is in the job's .err file."
+            )
 
     def _postrun(self, job, **kwargs):
         pass

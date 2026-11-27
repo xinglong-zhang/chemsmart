@@ -226,3 +226,69 @@ class TestMetalHelpers:
         assert "Mn" in symbols
         assert "C" not in symbols
         assert "Si" not in symbols
+
+    def test_is_metal_empty_string_is_false(self):
+        assert is_metal("") is False
+        assert is_metal("   ") is False
+
+    def test_is_metal_unparseable_symbol_is_false(self):
+        """A string with no alphabetic characters left after cleaning
+        makes to_element raise ValueError, which is_metal must catch
+        and treat as "not a metal" rather than propagating."""
+        assert is_metal("123") is False
+
+
+class TestPeriodicTableConversions:
+    def test_to_element_empty_string_raises(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="cannot be empty"):
+            p.to_element("")
+
+    def test_to_element_unparseable_raises(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="Unable to parse element"):
+            p.to_element("123")
+
+    def test_sorted_periodic_table_list(self):
+        assert p.sorted_periodic_table_list(["O", "H", "C"]) == [
+            "H",
+            "C",
+            "O",
+        ]
+
+    def test_to_weighted_atomic_mass_by_abundance(self):
+        mass = p.to_weighted_atomic_mass_by_abundance("C")
+        assert isinstance(mass, float)
+        assert 11.0 < mass < 13.0
+
+    def test_to_most_abundant_atomic_mass(self):
+        mass = p.to_most_abundant_atomic_mass("C")
+        assert isinstance(mass, float)
+        assert 11.0 < mass < 13.0
+
+    def test_requires_ecp_false_for_light_element(self):
+        assert p.requires_ecp("C") is False
+
+    def test_requires_ecp_true_for_heavy_element(self):
+        assert p.requires_ecp("Pd") is True
+
+    def test_atomic_masses_property(self):
+        masses = p.atomic_masses
+        assert masses[p.to_atomic_number("C")] == p.to_atomic_mass("C")
+
+    def test_to_atomic_mass(self):
+        mass = p.to_atomic_mass("C")
+        assert isinstance(mass, float)
+        assert 11.0 < mass < 13.0
+
+    def test_vdw_radius(self):
+        radius = p.vdw_radius("C")
+        assert isinstance(radius, float)
+        assert radius > 0
+
+    def test_covalent_radius(self):
+        radius = p.covalent_radius("C")
+        assert isinstance(radius, float)
+        assert radius > 0

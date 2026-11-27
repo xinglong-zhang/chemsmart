@@ -11,7 +11,6 @@ import os
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
@@ -297,37 +296,18 @@ class PyMOLJob(Job):
         molecules = molecules[string2index_1based(index)]
         logger.info(f"Num of molecules to use: {len(molecules)}.")
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecules,
-                    label=label,
-                    source_basename=source_basename,
-                    pymol_script=pymol_script,
-                    style=style,
-                    vdw=vdw,
-                    quiet_mode=quiet_mode,
-                    command_line_only=command_line_only,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecule=molecules,
-            label=label,
-            source_basename=source_basename,
-            jobrunner=jobrunner,
-            pymol_script=pymol_script,
-            style=style,
-            vdw=vdw,
-            quiet_mode=quiet_mode,
-            command_line_only=command_line_only,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                molecule=molecules,
+                label=label,
+                source_basename=source_basename,
+                pymol_script=pymol_script,
+                style=style,
+                vdw=vdw,
+                quiet_mode=quiet_mode,
+                command_line_only=command_line_only,
+            ),
             **kwargs,
         )
 
@@ -350,24 +330,11 @@ class PyMOLJob(Job):
         """
         molecules = Molecule.from_pubchem(identifier=identifier)
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecules,
-                    label=label,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecule=molecules,
-            label=label,
-            jobrunner=jobrunner,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                molecule=molecules,
+                label=label,
+            ),
             **kwargs,
         )
