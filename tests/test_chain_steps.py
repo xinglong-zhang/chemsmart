@@ -528,11 +528,15 @@ class TestBuildChainJob:
         )
         sp_child = sp.phases[0].resolve_jobs()[0]
         sp_suffix = sp_child.label.removeprefix("ts7p_ts_00_gaussian_sp")
+        assert sp_suffix == "_smd_toluene"
         reverse_irc = reverse.phases[0].resolve_jobs()[0]
         assert reverse_irc.label == "ts7p_ts_00_gaussian_ircr"
         assert reverse.label == f"ts7p_ts_ircr_opt_sp{sp_suffix}"
         assert forward.label == f"ts7p_ts_ircf_opt_sp{sp_suffix}"
-        assert os.path.basename(reverse_irc.folder) == reverse.label
+        assert os.path.isdir(reverse_irc.folder)
+        assert os.path.abspath(reverse_irc.folder) == os.path.abspath(
+            os.path.join(os.getcwd(), reverse.label)
+        )
         assert reverse_irc.endpoint_jobs()[0].folder == reverse_irc.folder
         reverse.phases[0]._resolved_jobs = [
             DummyHandoffJob("irc", _h2(z=0.90), complete=True)
@@ -544,16 +548,64 @@ class TestBuildChainJob:
         forward_opt = forward.phases[1].resolve_jobs()[0]
         assert reverse_opt.label == "ts7p_ts_01_gaussian_opt"
         assert forward_opt.label == reverse_opt.label
-        assert os.path.basename(reverse_opt.folder) == reverse.label
-        assert os.path.basename(forward_opt.folder) == forward.label
+        assert os.path.basename(reverse_opt.outputfile) == (
+            "ts7p_ts_01_gaussian_opt.log"
+        )
+        assert os.path.basename(forward_opt.outputfile) == os.path.basename(
+            reverse_opt.outputfile
+        )
+        assert os.path.isdir(reverse_opt.folder)
+        assert os.path.isdir(forward_opt.folder)
+        assert os.path.abspath(reverse_opt.folder) == os.path.abspath(
+            os.path.join(os.getcwd(), reverse.label)
+        )
+        assert os.path.abspath(forward_opt.folder) == os.path.abspath(
+            os.path.join(os.getcwd(), forward.label)
+        )
         assert os.path.abspath(reverse_opt.folder) != os.path.abspath(
             forward_opt.folder
+        )
+        assert os.path.dirname(reverse_opt.outputfile) != os.path.dirname(
+            forward_opt.outputfile
         )
         reverse.phases[1]._resolved_jobs = [
             DummyHandoffJob("opt", _h2(z=0.95), complete=True)
         ]
         reverse_sp = reverse.phases[2].resolve_jobs()[0]
         assert reverse_sp.folder == reverse_opt.folder
+
+    def test_opt_convergence_options_share_one_chain_label(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        settings = _chain_settings(gaussian="gas_solv")
+        plain = build_chain_job(
+            settings,
+            steps=(ChainStep(program="gaussian", job="opt"),),
+            molecules=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        tight = build_chain_job(
+            settings,
+            steps=(parse_chain_step("gaussian: -o tight opt"),),
+            molecules=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        assert plain.label == "mol_opt"
+        assert tight.label == plain.label
+        plain_job = plain.phases[0].resolve_jobs()[0]
+        tight_job = tight.phases[0].resolve_jobs()[0]
+        assert plain_job.label == "mol_00_gaussian_opt"
+        assert tight_job.label == plain_job.label
+        assert plain_job.settings.additional_opt_options_in_route is None
+        assert tight_job.settings.additional_opt_options_in_route == "tight"
+        assert os.path.isdir(plain_job.folder)
+        assert os.path.abspath(plain_job.folder) == os.path.abspath(
+            tight_job.folder
+        )
 
     def test_duplicate_steps_get_unique_labels(
         self, isolated_config_dir, temporary_working_dir
@@ -643,6 +695,7 @@ class TestBuildChainJob:
         best = _h2(z=0.85)
         best.energy = -2.0
         dummy = DummyCRESTJob(_h2(), best, complete=True)
+        os.makedirs(dummy.folder, exist_ok=True)
         best.write_xyz(dummy.conformers_file, mode="w")
         chain.phases[0]._resolved_jobs = [dummy]
         children = chain.phases[1].resolve_jobs()
@@ -1462,6 +1515,7 @@ class TestOutputFileHandoff:
             charge=0,
             multiplicity=1,
         )
+        assert chain.label == "mol_ts_qrc"
         ts_job = chain.phases[0].resolve_jobs()[0]
         shutil.copy(log, ts_job.outputfile)
         qrc_job = chain.phases[1].resolve_jobs()[0]

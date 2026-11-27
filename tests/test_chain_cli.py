@@ -259,16 +259,15 @@ orca: gas_solv
             catch_exceptions=False,
         )
         assert result.exit_code == 0, result.output
-        submit_script = tmp_path / (
-            "chemsmart_sub_chain_crest_best_crest_conformers_"
-            "xtb_opt_gaussian_opt.sh"
-        )
+        chain_label = "crest_best_crest_conformers_xtb_opt_gaussian_opt"
+        submit_script = tmp_path / f"chemsmart_sub_chain_{chain_label}.sh"
         assert submit_script.exists(), sorted(tmp_path.glob("chemsmart_*"))
-        run_script = tmp_path / submit_script.name.replace(
-            "chemsmart_sub_", "chemsmart_run_"
-        ).replace(".sh", ".py")
+        run_script = tmp_path / f"chemsmart_run_chain_{chain_label}.py"
         assert run_script.exists()
         submit_text = submit_script.read_text()
+        assert f"#PBS -N chain_{chain_label}" in submit_text
+        assert f"#PBS -o {chain_label}.pbsout" in submit_text
+        assert f"#PBS -e {chain_label}.pbserr" in submit_text
         assert submit_text.count("conda activate") == 1
         assert "module load craype-x86-rome" in submit_text
         assert "g16.login" in submit_text
@@ -952,7 +951,7 @@ class TestChainWorkflows:
             catch_exceptions=False,
         )
         assert result.exit_code == 0, result.output
-        run_script = tmp_path / "chemsmart_run_r_reaction.py"
+        run_script = tmp_path / "chemsmart_run_gaussian_r_reaction.py"
         assert run_script.exists(), sorted(tmp_path.glob("chemsmart_run_*.py"))
         text = run_script.read_text()
         assert "'--product'" in text
