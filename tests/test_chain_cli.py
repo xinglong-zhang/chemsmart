@@ -132,10 +132,10 @@ orca: gas_solv
         assert isinstance(job, ChainJob)
         assert job.PROGRAM == "chain"
         assert job.programs == ("crest", "xtb", "gaussian", "orca")
-        assert job.label.startswith("crest_best_00_crest_conformers_")
-        assert "_01_xtb_opt_" in job.label
-        assert "_02_gaussian_opt_" in job.label
-        assert "_03_orca_sp_" in job.label
+        assert job.label == (
+            "crest_best_crest_conformers_xtb_opt_gaussian_opt_"
+            "orca_sp_smd_cyclohexane"
+        )
         assert [phase.name for phase in job.phases] == [
             "00_crest_conformers",
             "01_xtb_opt",
@@ -146,6 +146,7 @@ orca: gas_solv
         assert len(children) == 1
         assert isinstance(children[0], CRESTConformerSearchJob)
         assert children[0].label == "crest_best_00_crest_conformers"
+        assert Path(children[0].folder).name == job.label
 
     def test_grouper_step_does_not_need_a_chain_alias(
         self, isolated_config_dir, single_molecule_xyz_file
@@ -258,11 +259,11 @@ orca: gas_solv
             catch_exceptions=False,
         )
         assert result.exit_code == 0, result.output
-        submit_scripts = list(
-            tmp_path.glob("chemsmart_sub_chain_crest_best_*.sh")
+        submit_script = tmp_path / (
+            "chemsmart_sub_chain_crest_best_crest_conformers_"
+            "xtb_opt_gaussian_opt.sh"
         )
-        assert len(submit_scripts) == 1, sorted(tmp_path.glob("chemsmart_*"))
-        submit_script = submit_scripts[0]
+        assert submit_script.exists(), sorted(tmp_path.glob("chemsmart_*"))
         run_script = tmp_path / submit_script.name.replace(
             "chemsmart_sub_", "chemsmart_run_"
         ).replace(".sh", ".py")

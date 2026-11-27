@@ -134,15 +134,15 @@ class GaussianQRCJob(GaussianJob):
             elif direction == "r":
                 mol = self.qrcr_molecule
             logger.debug(f"Molecule created: {mol} with label: {label}")
-            jobs.append(
-                GaussianGeneralJob(
-                    molecule=mol,
-                    settings=self.settings,
-                    label=label,
-                    jobrunner=self.jobrunner,
-                    skip_completed=self.skip_completed,
-                )
+            job = GaussianGeneralJob(
+                molecule=mol,
+                settings=self.settings,
+                label=label,
+                jobrunner=self.jobrunner,
+                skip_completed=self.skip_completed,
             )
+            job.folder = self.folder
+            jobs.append(job)
         logger.debug(f"QRC jobs created: {jobs}")
         return jobs
 

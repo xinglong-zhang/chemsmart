@@ -456,9 +456,11 @@ class TestBuildChainJob:
             children = chain.phases[0].resolve_jobs()
             assert len(children) == 1
             child = children[0]
-            assert chain.label == child.label
+            prefix = f"mol_00_{program}_"
+            assert child.label.startswith(prefix)
+            assert chain.label == f"mol_{child.label.removeprefix(prefix)}"
             assert isinstance(child, job_class)
-            assert child.label.startswith("mol_00_")
+            assert os.path.basename(child.folder) == chain.label
             assert child.settings.charge == 0
             assert child.settings.multiplicity == 1
 
@@ -477,7 +479,7 @@ class TestBuildChainJob:
         child = chain.phases[0].resolve_jobs()[0]
         assert isinstance(child, GaussianIRCJob)
         assert child.label == "mol_00_gaussian_irc"
-        assert chain.label == "mol_00_gaussian_irc"
+        assert chain.label == "mol_irc"
         assert child.settings.charge == 0
 
     def test_chain_label_follows_each_step_job_label(
@@ -524,16 +526,34 @@ class TestBuildChainJob:
             charge=0,
             multiplicity=1,
         )
-        sp_suffix = sp.label.removeprefix("ts7p_ts_00_gaussian_")
-        assert reverse.phases[0].resolve_jobs()[0].label == (
-            "ts7p_ts_00_gaussian_ircr"
+        sp_child = sp.phases[0].resolve_jobs()[0]
+        sp_suffix = sp_child.label.removeprefix("ts7p_ts_00_gaussian_sp")
+        reverse_irc = reverse.phases[0].resolve_jobs()[0]
+        assert reverse_irc.label == "ts7p_ts_00_gaussian_ircr"
+        assert reverse.label == f"ts7p_ts_ircr_opt_sp{sp_suffix}"
+        assert forward.label == f"ts7p_ts_ircf_opt_sp{sp_suffix}"
+        assert os.path.basename(reverse_irc.folder) == reverse.label
+        assert reverse_irc.endpoint_jobs()[0].folder == reverse_irc.folder
+        reverse.phases[0]._resolved_jobs = [
+            DummyHandoffJob("irc", _h2(z=0.90), complete=True)
+        ]
+        forward.phases[0]._resolved_jobs = [
+            DummyHandoffJob("irc", _h2(z=1.10), complete=True)
+        ]
+        reverse_opt = reverse.phases[1].resolve_jobs()[0]
+        forward_opt = forward.phases[1].resolve_jobs()[0]
+        assert reverse_opt.label == "ts7p_ts_01_gaussian_opt"
+        assert forward_opt.label == reverse_opt.label
+        assert os.path.basename(reverse_opt.folder) == reverse.label
+        assert os.path.basename(forward_opt.folder) == forward.label
+        assert os.path.abspath(reverse_opt.folder) != os.path.abspath(
+            forward_opt.folder
         )
-        assert reverse.label == (
-            "ts7p_ts_00_gaussian_ircr_01_gaussian_opt_02_gaussian_" + sp_suffix
-        )
-        assert forward.label == reverse.label.replace(
-            "_00_gaussian_ircr_", "_00_gaussian_ircf_"
-        )
+        reverse.phases[1]._resolved_jobs = [
+            DummyHandoffJob("opt", _h2(z=0.95), complete=True)
+        ]
+        reverse_sp = reverse.phases[2].resolve_jobs()[0]
+        assert reverse_sp.folder == reverse_opt.folder
 
     def test_duplicate_steps_get_unique_labels(
         self, isolated_config_dir, temporary_working_dir
@@ -823,6 +843,7 @@ class TestCrestEnsembleHandoff:
         crest = _crest_with_conformers([first, _h2(z=0.90)])
         chain.phases[0]._resolved_jobs = [crest]
         job = chain.phases[1].resolve_jobs()[0]
+        assert chain.label == "mol_crest_conformers_crest_opt"
         assert job.num_confs_to_opt == 2
         assert job.label == "mol_opt"
         assert np.allclose(job.all_conformers[0].positions, first.positions)
@@ -1579,6 +1600,7 @@ class TestMultiStructureStart:
             label="mol",
         )
         assert chain.molecule is None
+        assert chain.label == "mol_opt_opt"
         children = chain.phases[0].resolve_jobs()
         assert [child.label for child in children] == [
             "mol_00_gaussian_opt_idx2",

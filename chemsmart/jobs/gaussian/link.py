@@ -118,13 +118,15 @@ class GaussianLinkJob(GaussianJob):
                 ):
                     label += "_flat"
 
-        return GaussianLinkJob(
+        job = GaussianLinkJob(
             molecule=self.molecule,
             settings=irc_settings,
             label=label,
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
+        job.folder = self.folder
+        return job
 
     def _ircf_link_job(self):
         """Create forward IRC link job."""

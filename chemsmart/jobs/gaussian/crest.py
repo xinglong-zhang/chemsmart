@@ -227,15 +227,15 @@ class GaussianCrestJob(GaussianJob):
         jobs = []
         for i in range(self.num_conformers):
             label = f"{self.label}_c{i + 1}"  # 1-indexed for conformers
-            jobs += [
-                GaussianGeneralJob(
-                    molecule=self.all_conformers[i],
-                    settings=self.settings,
-                    label=label,
-                    jobrunner=self.jobrunner,
-                    skip_completed=self.skip_completed,
-                )
-            ]
+            job = GaussianGeneralJob(
+                molecule=self.all_conformers[i],
+                settings=self.settings,
+                label=label,
+                jobrunner=self.jobrunner,
+                skip_completed=self.skip_completed,
+            )
+            job.folder = self.folder
+            jobs.append(job)
         return jobs
 
     def _run_all_jobs(self):

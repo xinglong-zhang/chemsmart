@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import shlex
 import tempfile
 from dataclasses import dataclass, replace
@@ -27,6 +28,7 @@ from chemsmart.settings.crest import CRESTProjectSettings
 from chemsmart.settings.gaussian import GaussianProjectSettings
 from chemsmart.settings.orca import ORCAProjectSettings
 from chemsmart.settings.xtb import XTBProjectSettings
+from chemsmart.utils.repattern import file_index_ordinal_pattern
 
 logger = logging.getLogger(__name__)
 
@@ -822,23 +824,89 @@ def _step_slug(step):
     return f"{step.program}_{step.job}"
 
 
-def _join_step_labels(stem, labels):
-    """One chain label from the stem and each step job label.
+def _strip_file_index_ordinal(label):
+    return re.sub(file_index_ordinal_pattern, "", label)
 
-    ``ts7p_ts`` plus ``ts7p_ts_00_gaussian_ircr`` becomes
-    ``ts7p_ts_00_gaussian_ircr``. Further step labels append the part
-    after the stem.
+
+def _join_step_labels(stem, steps):
+    """Stem plus one piece per step.
+
+    A piece is the child label after ``{stem}_{index:02d}_{program}_``.
+    That text is ``{job}{suffix}`` when the command keeps the job name,
+    and the program is included only when the pipeline mixes programs.
+    A file-index ordinal (``_idxN``) is omitted. Gaussian crest contributes
+    ``crest_{jobtype}``. A step ``-l`` that replaces the assigned label
+    contributes that label.
     """
-    parts = []
-    prefix = f"{stem}_"
-    for label in labels:
-        if label.startswith(prefix):
-            parts.append(label[len(prefix) :])
-        elif label != stem:
-            parts.append(label)
-    if not parts:
+    programs = {step.program for _, step, _ in steps}
+    include_program = len(programs) > 1
+    pieces = []
+    for index, step, labels in steps:
+        piece = _chain_step_piece(stem, index, step, labels, include_program)
+        if piece:
+            pieces.append(piece)
+    if not pieces:
         return stem
-    return prefix + "_".join(parts)
+    return f"{stem}_{'_'.join(pieces)}"
+
+
+def _chain_step_piece(stem, index, step, labels, include_program):
+    crest_piece = _gaussian_crest_piece(stem, step, labels)
+    if crest_piece is not None:
+        return crest_piece
+    for label in labels:
+        piece = _piece_from_assigned_label(
+            stem, index, step, label, include_program
+        )
+        if piece is None:
+            return _custom_step_piece(stem, labels)
+        return piece
+    return step.job
+
+
+def _gaussian_crest_piece(stem, step, labels):
+    if step.program != "gaussian" or step.job != "crest":
+        return None
+    jobtype = _option_value(step, "-j", "--jobtype")
+    if not jobtype:
+        return None
+    runtime = f"{stem}_{jobtype}"
+    suffix = ""
+    if labels:
+        stripped = _strip_file_index_ordinal(labels[0])
+        if stripped.startswith(runtime):
+            suffix = stripped[len(runtime) :]
+    return f"crest_{jobtype}{suffix}"
+
+
+def _piece_from_assigned_label(stem, index, step, label, include_program):
+    """Job piece from a preview label, or ``None`` if it was replaced."""
+    stripped = _strip_file_index_ordinal(label)
+    head = f"{stem}_{index:02d}_"
+    if not stripped.startswith(head):
+        return None
+    rest = stripped[len(head) :]
+    program_prefix = f"{step.program}_"
+    if rest.startswith(program_prefix):
+        job_part = rest[len(program_prefix) :]
+        if step.program == step.job:
+            return f"{step.program}_{job_part}"
+        if include_program:
+            return f"{step.program}_{job_part}"
+        return job_part
+    if rest == step.program:
+        return rest
+    return None
+
+
+def _custom_step_piece(stem, labels):
+    if not labels:
+        return ""
+    stripped = _strip_file_index_ordinal(labels[0])
+    prefix = f"{stem}_"
+    if stripped.startswith(prefix):
+        return stripped[len(prefix) :]
+    return stripped
 
 
 def _child_label(chain_label, index, step, ordinal, count, kind):
@@ -929,9 +997,10 @@ class ChainPipelineBuilder:
                 if step.program in PROGRAM_ADAPTERS
             )
         )
+        self._chain_label = self._submission_label()
         return ChainJob(
             molecule=parent,
-            label=self._submission_label(),
+            label=self._chain_label,
             jobrunner=self.context.jobrunner,
             skip_completed=self.context.skip_completed,
             phases=self.phases,
@@ -940,16 +1009,12 @@ class ChainPipelineBuilder:
         )
 
     def _submission_label(self):
-        """Chain label built from each step's own job label.
-
-        A standalone IRC reverse job is ``{stem}_ircr``. The chain step is
-        ``{stem}_00_gaussian_ircr``, and that text is part of the chain
-        label. Later steps are appended the same way.
-        """
-        labels = []
-        for index, step in enumerate(self._prepared):
-            labels.extend(self._submission_step_labels(index, step))
-        return _join_step_labels(self.context.label, labels)
+        """Chain submission name: the stem plus one piece per step."""
+        steps = [
+            (index, step, self._submission_step_labels(index, step))
+            for index, step in enumerate(self._prepared)
+        ]
+        return _join_step_labels(self.context.label, steps)
 
     def _submission_step_labels(self, index, step):
         if step.program == "thermochemistry":
@@ -1095,15 +1160,38 @@ class ChainPipelineBuilder:
                 return []
             filename = source[0]
             if step.program == "grouper":
-                return self._grouper_jobs(
+                jobs = self._grouper_jobs(
                     step, filename, handoff.molecules, index
                 )
-            return self._gaussian_crest_jobs(
-                step, filename, handoff.molecules[0]
-            )
+            else:
+                jobs = self._gaussian_crest_jobs(
+                    step, filename, handoff.molecules[0]
+                )
+            return self._place_child_jobs(jobs)
         if step.program == "thermochemistry":
-            return self._thermochemistry_jobs(step, handoff, index)
-        return self._program_jobs(step, handoff, index)
+            jobs = self._thermochemistry_jobs(step, handoff, index)
+        else:
+            jobs = self._program_jobs(step, handoff, index)
+        return self._place_child_jobs(jobs)
+
+    def _place_child_jobs(self, jobs):
+        """Write child outputs under ``{cwd}/{chain label}/``."""
+        if not jobs:
+            return []
+        folder = os.path.abspath(os.path.join(os.getcwd(), self._chain_label))
+        os.makedirs(folder, exist_ok=True)
+        cwd = os.path.abspath(os.getcwd())
+        for job in jobs:
+            previous = os.path.abspath(job.folder) if job.folder else None
+            job.folder = folder
+            if (
+                previous
+                and previous not in {folder, cwd}
+                and os.path.isdir(previous)
+                and not os.listdir(previous)
+            ):
+                os.rmdir(previous)
+        return jobs
 
     def _program_jobs(self, step, handoff, index):
         """Build one program command per structure.
@@ -1400,11 +1488,14 @@ def build_chain_job(
             none; each child stores its own. Each structure selected by
             ``-i`` needs ``structure_index_in_file`` set to its 1-based
             index in the file.
-        label (str): Stem for child jobs. Each child is
-            ``{label}_{index:02d}_{program}_{job}``, plus the suffix that
-            job would add on its own (IRC reverse is ``ircr``, for
-            example). The chain job label is those step labels joined, so
-            a reverse IRC step contributes ``{label}_00_gaussian_ircr``.
+        label (str): Stem for child jobs and the start of the chain label.
+            Each child is ``{label}_{index:02d}_{program}_{job}``, plus the
+            suffix that job would add on its own (IRC reverse is ``ircr``,
+            for example). The chain label is that stem plus one piece per
+            step. The piece is the child label after
+            ``{label}_{index:02d}_{program}_`` (``{job}{suffix}``), and the
+            program is included only when the pipeline mixes programs.
+            Child outputs are written under ``{cwd}/{chain label}/``.
         charge (int, optional): Chain-level charge override.
         multiplicity (int, optional): Chain-level multiplicity override.
         jobrunner: Runner assigned to the parent ``ChainJob``.

@@ -132,6 +132,12 @@ for that step and is written into its output, so the following step sees it. Gro
 grouper command ``-c`` is concentration and ``-m`` is the matrix file format. Do not combine ``-s/--steps`` with
 ``pka``, ``fukui``, ``redox``, or ``reaction``.
 
+The scheduler name is that file stem, or the chain ``-l`` / ``-a`` value, plus one piece per step. A piece is
+``{job}{suffix}`` when every step uses the same program, and ``{program}_{job}{suffix}`` when the pipeline mixes
+programs. ``suffix`` is the tail that step's command adds beyond ``{stem}_{index:02d}_{program}_{job}`` (IRC reverse
+contributes ``r``; a solvated single point keeps its solvent tail). A file index (``_idxN``) is not part of this name.
+Gaussian crest contributes ``crest_{jobtype}``. Each step writes its outputs in ``{cwd}/{scheduler name}/``.
+
 The whole pipeline is **one** ``ChainJob`` submission. ``chemsmart sub`` writes one scheduler script for all phases.
 ``--fake`` uses the chain fake runner for the parent; each child gets the matching program fake runner when its type
 differs.

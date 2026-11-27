@@ -114,13 +114,15 @@ class GaussianIRCJob(GaussianJob):
             # parent label, so the sub-job reuses it unchanged.
 
         ircf_settings.jobtype = "ircf"
-        return GaussianGeneralJob(
+        job = GaussianGeneralJob(
             molecule=self.molecule,
             settings=ircf_settings,
             label=label,
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
+        job.folder = self.folder
+        return job
 
     def _ircr_job(self):
         """
@@ -153,13 +155,15 @@ class GaussianIRCJob(GaussianJob):
             # parent label, so the sub-job reuses it unchanged.
 
         ircr_settings.jobtype = "ircr"
-        return GaussianGeneralJob(
+        job = GaussianGeneralJob(
             molecule=self.molecule,
             settings=ircr_settings,
             label=label,
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
+        job.folder = self.folder
+        return job
 
     def _run_forward(self):
         """
