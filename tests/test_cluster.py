@@ -104,6 +104,48 @@ class TestClusterHelperSlurm:
         names = helper._get_running_job_names_on_slurm()
         assert names == [job_name]
 
+    @pytest.mark.parametrize(
+        ("job_id_text", "expected"),
+        [
+            ("12345", 12345),
+            ("12345_1", 12345),
+            ("12345.batch", None),
+            ("12345.extern", None),
+            ("12345.0", None),
+            ("12345_1.batch", None),
+        ],
+    )
+    def test_parent_slurm_job_id(self, job_id_text, expected):
+        assert ClusterHelper._parent_slurm_job_id(job_id_text) == expected
+
+    def test_get_running_job_names_keeps_parent_when_sacct_has_batch_row(
+        self, mocker
+    ):
+        """A .batch step must not hide the queued parent job name."""
+        mocker.patch("os.getlogin", return_value="alice")
+        squeue_output = b"  12345      main   chainjob   alice\n"
+        sacct_output = (
+            b"User       JobID       JobName\n"
+            b"alice      99999.batch batch\n"
+            b"alice      99999.extern extern\n"
+            b"alice      12345.batch batch\n"
+            b"alice      12345.extern extern\n"
+            b"alice      12345       "
+            b"chemsmart_sub_chain_ts7p.sh\n"
+            b"alice      88888       completed_job\n"
+        )
+        mocker.patch(
+            "chemsmart.utils.cluster.subprocess.Popen",
+            side_effect=[
+                FakeCompletedProcess(b""),
+                FakeCompletedProcess(squeue_output),
+                FakeCompletedProcess(sacct_output),
+            ],
+        )
+        helper = ClusterHelper()
+        names = helper._get_running_job_names_on_slurm()
+        assert names == ["chemsmart_sub_chain_ts7p.sh"]
+
     def test_get_running_jobs_slurm_success(self, mocker):
         mocker.patch("os.getlogin", return_value="alice")
         helper = ClusterHelper()
