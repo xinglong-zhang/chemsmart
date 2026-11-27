@@ -16,7 +16,11 @@ import os
 
 import click
 
-from chemsmart.analysis.thermochemistry import Thermochemistry
+from chemsmart.analysis.pka import (  # noqa: F401
+    compute_pka,
+    compute_pka_thermochemistry,
+    print_pka_summary,
+)
 from chemsmart.cli.thermochemistry.thermochemistry import (
     resolve_entropy_cutoff,
     thermochemistry_cutoff_options,
@@ -24,489 +28,25 @@ from chemsmart.cli.thermochemistry.thermochemistry import (
 )
 from chemsmart.io.file import PKaCDXFile
 from chemsmart.utils.cli import MyCommand, MyGroup
-from chemsmart.utils.constants import HARTREE_TO_KCAL_MOL, energy_conversion
 from chemsmart.utils.io import get_program_type_from_file
 
 logger = logging.getLogger(__name__)
 
 
-def resolve_pka_entropy_cutoff(cutoff_entropy_grimme, cutoff_entropy_truhlar):
-    """Resolve pKa entropy cutoff; default to Grimme 100 cm⁻¹ when unset."""
-    s_freq_cutoff, entropy_method = resolve_entropy_cutoff(
-        cutoff_entropy_grimme, cutoff_entropy_truhlar
-    )
-    if s_freq_cutoff is None:
-        return 100.0, "grimme"
-    return s_freq_cutoff, entropy_method
-
-
-def _pka_thermochemistry_kwargs(
-    temperature,
-    concentration,
-    pressure,
-    cutoff_entropy_grimme,
-    cutoff_enthalpy,
-    entropy_method,
-):
-    return {
-        "temperature": temperature,
-        "concentration": concentration,
-        "pressure": pressure,
-        "s_freq_cutoff": cutoff_entropy_grimme,
-        "h_freq_cutoff": cutoff_enthalpy,
-        "entropy_method": entropy_method,
-        "energy_units": "hartree",
-        "check_imaginary_frequencies": True,
-    }
-
-
-def _extract_thermochemistry_property(thermo, filepath, attr, label):
-    value = getattr(thermo, attr)
-    if value is None:
-        raise ValueError(f"Could not extract {label} from file: {filepath}")
-    return value
-
-
-def pka_gas_phase_data(
-    filepath,
-    temperature=298.15,
-    concentration=1.0,
-    pressure=1.0,
-    cutoff_entropy_grimme=100.0,
-    cutoff_enthalpy=100.0,
-    entropy_method="grimme",
-):
-    """Return gas-phase SCF energy and qh-G correction in Hartree."""
-    thermo = Thermochemistry(
-        filename=filepath,
-        **_pka_thermochemistry_kwargs(
-            temperature,
-            concentration,
-            pressure,
-            cutoff_entropy_grimme,
-            cutoff_enthalpy,
-            entropy_method,
-        ),
-    )
-    electronic_energy_j_mol = _extract_thermochemistry_property(
-        thermo,
-        filepath,
-        "electronic_energy",
-        "SCF energy",
-    )
-    qh_gibbs_j_mol = _extract_thermochemistry_property(
-        thermo,
-        filepath,
-        "qrrho_gibbs_free_energy",
-        "quasi-harmonic Gibbs free energy",
-    )
-    electronic_energy_au = energy_conversion(
-        "j/mol", "hartree", electronic_energy_j_mol
-    )
-    qh_gibbs_au = energy_conversion("j/mol", "hartree", qh_gibbs_j_mol)
-    return electronic_energy_au, qh_gibbs_au - electronic_energy_au
-
-
-def pka_solvent_scf_energy(filepath):
-    """Return solvent-phase SCF energy in Hartree."""
-    thermo = Thermochemistry(filename=filepath)
-    electronic_energy_j_mol = _extract_thermochemistry_property(
-        thermo,
-        filepath,
-        "electronic_energy",
-        "SCF energy",
-    )
-    return energy_conversion("j/mol", "hartree", electronic_energy_j_mol)
-
-
-def compute_pka(
-    ha_gas_file,
-    a_gas_file,
-    href_gas_file=None,
-    ref_gas_file=None,
-    ha_solv_file=None,
-    a_solv_file=None,
-    href_solv_file=None,
-    ref_solv_file=None,
-    pka_reference=None,
-    temperature=298.15,
-    concentration=1.0,
-    pressure=1.0,
-    cutoff_entropy_grimme=100.0,
-    cutoff_enthalpy=100.0,
-    entropy_method="grimme",
-    scheme="proton exchange",
-    delta_G_proton=None,
-):
-    """Compute pKa from output files using program-independent thermochemistry."""
-    if scheme == "direct":
-        if delta_G_proton is None:
-            raise ValueError(
-                "delta_G_proton is required when scheme='direct'."
-            )
-    elif pka_reference is None:
-        raise ValueError(
-            "pka_reference is required when scheme='proton exchange'."
-        )
-    else:
-        missing = [
-            name
-            for name, value in (
-                ("href_gas_file", href_gas_file),
-                ("ref_gas_file", ref_gas_file),
-                ("ha_solv_file", ha_solv_file),
-                ("a_solv_file", a_solv_file),
-                ("href_solv_file", href_solv_file),
-                ("ref_solv_file", ref_solv_file),
-            )
-            if value is None
-        ]
-        if missing:
-            raise ValueError(
-                "Missing required files for proton exchange scheme: "
-                + ", ".join(missing)
-            )
-
-    if scheme == "direct" and (ha_solv_file is None or a_solv_file is None):
-        raise ValueError(
-            "ha_solv_file and a_solv_file are required for scheme='direct'."
-        )
-
-    thermo_kwargs = dict(
-        temperature=temperature,
-        concentration=concentration,
-        pressure=pressure,
-        cutoff_entropy_grimme=cutoff_entropy_grimme,
-        cutoff_enthalpy=cutoff_enthalpy,
-        entropy_method=entropy_method,
-    )
-
-    E_gas_HA_au, G_corr_HA_au = pka_gas_phase_data(
-        ha_gas_file, **thermo_kwargs
-    )
-    E_gas_A_au, G_corr_A_au = pka_gas_phase_data(a_gas_file, **thermo_kwargs)
-    E_solv_HA_au = pka_solvent_scf_energy(ha_solv_file)
-    E_solv_A_au = pka_solvent_scf_energy(a_solv_file)
-    G_soln_HA_au = E_solv_HA_au + G_corr_HA_au
-    G_soln_A_au = E_solv_A_au + G_corr_A_au
-
-    R_kcal = 0.001987204
-    ln10 = 2.302585093
-
-    if scheme == "direct":
-        G_soln_HA_kcal = G_soln_HA_au * HARTREE_TO_KCAL_MOL
-        G_soln_A_kcal = G_soln_A_au * HARTREE_TO_KCAL_MOL
-        delta_G_diss_kcal_mol = G_soln_A_kcal + delta_G_proton - G_soln_HA_kcal
-        delta_G_diss_au = delta_G_diss_kcal_mol / HARTREE_TO_KCAL_MOL
-        pka = delta_G_diss_kcal_mol / (R_kcal * temperature * ln10)
-        return {
-            "pKa": pka,
-            "scheme": "direct",
-            "delta_G_proton_kcal_mol": delta_G_proton,
-            "delta_G_diss_kcal_mol": delta_G_diss_kcal_mol,
-            "delta_G_diss_au": delta_G_diss_au,
-            "delta_G_soln_kcal_mol": delta_G_diss_kcal_mol,
-            "delta_G_soln_au": delta_G_diss_au,
-            "temperature": temperature,
-            "G_soln_HA_au": G_soln_HA_au,
-            "G_soln_A_au": G_soln_A_au,
-            "E_solv_HA_au": E_solv_HA_au,
-            "E_solv_A_au": E_solv_A_au,
-            "G_corr_HA_au": G_corr_HA_au,
-            "G_corr_A_au": G_corr_A_au,
-            "E_gas_HA_au": E_gas_HA_au,
-            "E_gas_A_au": E_gas_A_au,
-        }
-
-    E_gas_HRef_au, G_corr_HRef_au = pka_gas_phase_data(
-        href_gas_file, **thermo_kwargs
-    )
-    E_gas_Ref_au, G_corr_Ref_au = pka_gas_phase_data(
-        ref_gas_file, **thermo_kwargs
-    )
-    E_solv_HRef_au = pka_solvent_scf_energy(href_solv_file)
-    E_solv_Ref_au = pka_solvent_scf_energy(ref_solv_file)
-    G_soln_HRef_au = E_solv_HRef_au + G_corr_HRef_au
-    G_soln_Ref_au = E_solv_Ref_au + G_corr_Ref_au
-
-    delta_G_soln_au = (G_soln_A_au + G_soln_HRef_au) - (
-        G_soln_HA_au + G_soln_Ref_au
-    )
-    delta_G_soln_kcal_mol = delta_G_soln_au * HARTREE_TO_KCAL_MOL
-    pka = pka_reference + delta_G_soln_kcal_mol / (R_kcal * temperature * ln10)
-
-    return {
-        "pKa": pka,
-        "scheme": "proton exchange",
-        "pKa_reference": pka_reference,
-        "delta_G_soln_kcal_mol": delta_G_soln_kcal_mol,
-        "delta_G_soln_au": delta_G_soln_au,
-        "temperature": temperature,
-        "G_soln_HA_au": G_soln_HA_au,
-        "G_soln_A_au": G_soln_A_au,
-        "G_soln_HRef_au": G_soln_HRef_au,
-        "G_soln_Ref_au": G_soln_Ref_au,
-        "E_solv_HA_au": E_solv_HA_au,
-        "E_solv_A_au": E_solv_A_au,
-        "E_solv_HRef_au": E_solv_HRef_au,
-        "E_solv_Ref_au": E_solv_Ref_au,
-        "G_corr_HA_au": G_corr_HA_au,
-        "G_corr_A_au": G_corr_A_au,
-        "G_corr_HRef_au": G_corr_HRef_au,
-        "G_corr_Ref_au": G_corr_Ref_au,
-        "E_gas_HA_au": E_gas_HA_au,
-        "E_gas_A_au": E_gas_A_au,
-        "E_gas_HRef_au": E_gas_HRef_au,
-        "E_gas_Ref_au": E_gas_Ref_au,
-    }
-
-
-def _thermochemistry_value_in_units(
-    thermo, filepath, attr, energy_units, label
-):
-    value_j_mol = _extract_thermochemistry_property(
-        thermo, filepath, attr, label
-    )
-    return energy_conversion("j/mol", energy_units, value_j_mol)
-
-
-def compute_pka_thermochemistry(
-    ha_file=None,
-    a_file=None,
-    href_file=None,
-    ref_file=None,
-    temperature=298.15,
-    concentration=1.0,
-    pressure=1.0,
-    cutoff_entropy_grimme=100.0,
-    cutoff_enthalpy=100.0,
-    energy_units="hartree",
-    entropy_method="grimme",
-):
-    """Extract gas-phase thermochemistry for pKa species from output files."""
-    results = {
-        "settings": {
-            "temperature": temperature,
-            "concentration": concentration,
-            "pressure": pressure,
-            "cutoff_entropy_grimme": cutoff_entropy_grimme,
-            "cutoff_enthalpy": cutoff_enthalpy,
-            "energy_units": energy_units,
-        }
-    }
-    thermo_kwargs = _pka_thermochemistry_kwargs(
-        temperature,
-        concentration,
-        pressure,
-        cutoff_entropy_grimme,
-        cutoff_enthalpy,
-        entropy_method,
-    )
-
-    def get_species_thermo(filepath, name):
-        if filepath is None:
-            return None
-        thermo = Thermochemistry(filename=filepath, **thermo_kwargs)
-        return {
-            "name": name,
-            "E": _thermochemistry_value_in_units(
-                thermo,
-                filepath,
-                "electronic_energy",
-                energy_units,
-                "SCF energy",
-            ),
-            "qh_G": _thermochemistry_value_in_units(
-                thermo,
-                filepath,
-                "qrrho_gibbs_free_energy",
-                energy_units,
-                "quasi-harmonic Gibbs free energy",
-            ),
-            "ZPE": _thermochemistry_value_in_units(
-                thermo,
-                filepath,
-                "zero_point_energy",
-                energy_units,
-                "zero-point energy",
-            ),
-            "H": _thermochemistry_value_in_units(
-                thermo, filepath, "enthalpy", energy_units, "enthalpy"
-            ),
-            "qh_H": _thermochemistry_value_in_units(
-                thermo,
-                filepath,
-                "qrrho_enthalpy",
-                energy_units,
-                "quasi-harmonic enthalpy",
-            ),
-            "G": _thermochemistry_value_in_units(
-                thermo,
-                filepath,
-                "gibbs_free_energy",
-                energy_units,
-                "Gibbs free energy",
-            ),
-        }
-
-    if ha_file is not None:
-        results["HA"] = get_species_thermo(ha_file, "HA")
-    if a_file is not None:
-        results["A"] = get_species_thermo(a_file, "A-")
-    if href_file is not None:
-        results["HRef"] = get_species_thermo(href_file, "HRef")
-    if ref_file is not None:
-        results["Ref"] = get_species_thermo(ref_file, "Ref-")
-    return results
-
-
-def print_pka_summary(
-    ha_gas_file,
-    a_gas_file,
-    href_gas_file=None,
-    ref_gas_file=None,
-    ha_solv_file=None,
-    a_solv_file=None,
-    href_solv_file=None,
-    ref_solv_file=None,
-    pka_reference=None,
-    temperature=298.15,
-    concentration=1.0,
-    pressure=1.0,
-    cutoff_entropy_grimme=100.0,
-    cutoff_enthalpy=100.0,
-    entropy_method="grimme",
-    scheme="proton exchange",
-    delta_G_proton=None,
-):
-    """Print a formatted summary of a dual-level pKa calculation."""
-    result = compute_pka(
-        ha_gas_file=ha_gas_file,
-        a_gas_file=a_gas_file,
-        href_gas_file=href_gas_file,
-        ref_gas_file=ref_gas_file,
-        ha_solv_file=ha_solv_file,
-        a_solv_file=a_solv_file,
-        href_solv_file=href_solv_file,
-        ref_solv_file=ref_solv_file,
-        pka_reference=pka_reference,
-        temperature=temperature,
-        concentration=concentration,
-        pressure=pressure,
-        cutoff_entropy_grimme=cutoff_entropy_grimme,
-        cutoff_enthalpy=cutoff_enthalpy,
-        entropy_method=entropy_method,
-        scheme=scheme,
-        delta_G_proton=delta_G_proton,
-    )
-
-    if scheme == "direct":
-        print("=" * 78)
-        print("pKa Calculation - Direct Dissociation Scheme")
-        print("=" * 78)
-        print("Reaction: HA → A⁻ + H⁺")
-        print(f"Temperature: {temperature} K")
-        print()
-        print("Method:")
-        print("  G_corr = qh-G(T) - E_gas  (from gas-phase freq calculation)")
-        print("  G_soln = E_solv + G_corr  (solution free energy)")
-        print("  ΔG_diss = G_soln(A⁻) + G_soln(H⁺) - G_soln(HA)")
-        print("  pKa = ΔG_diss / (2.303 × R × T)")
-        print("-" * 78)
-        print()
-        print("Gas-Phase Electronic Energies (E_gas, au):")
-        print(f"  HA:  {result['E_gas_HA_au']:.10f}")
-        print(f"  A⁻:  {result['E_gas_A_au']:.10f}")
-        print()
-        print("Thermal Corrections (G_corr = qh-G - E_gas, au):")
-        print(f"  HA:  {result['G_corr_HA_au']:.10f}")
-        print(f"  A⁻:  {result['G_corr_A_au']:.10f}")
-        print()
-        print("Solvent Single-Point Energies (E_solv, au):")
-        print(f"  HA:  {result['E_solv_HA_au']:.10f}")
-        print(f"  A⁻:  {result['E_solv_A_au']:.10f}")
-        print()
-        print("Solution Free Energies (G_soln = E_solv + G_corr, au):")
-        print(f"  HA:  {result['G_soln_HA_au']:.10f}")
-        print(f"  A⁻:  {result['G_soln_A_au']:.10f}")
-        print("-" * 78)
-        print()
-        print("pKa Calculation:")
-        print(f"  G_soln(H⁺) = {delta_G_proton:.4f} kcal/mol")
-        print(f"  ΔG_diss = {result['delta_G_diss_au']:.10f} au")
-        print(f"         = {result['delta_G_diss_kcal_mol']:.4f} kcal/mol")
-        print()
-        print(f"  *** Computed pKa(HA) = {result['pKa']:.2f} ***")
-        print("=" * 78)
-        return
-
-    print("=" * 78)
-    print("pKa Calculation - Dual-level Proton Exchange Scheme")
-    print("=" * 78)
-    print("Reaction: HA + Ref⁻ → A⁻ + HRef")
-    print(f"Temperature: {temperature} K")
-    print()
-    print("Method:")
-    print("  G_corr = qh-G(T) - E_gas  (from gas-phase freq calculation)")
-    print("  G_soln = E_solv + G_corr  (solution free energy)")
-    print(
-        "  ΔG_soln = [G(A⁻)_soln + G(HRef)_soln] - [G(HA)_soln + G(Ref⁻)_soln]"
-    )
-    print("  pKa = pKa_ref + ΔG_soln / (RT × ln10)")
-    print("-" * 78)
-    print()
-    print("Gas-Phase Electronic Energies (E_gas, au):")
-    print(f"  HA:  {result['E_gas_HA_au']:.10f}")
-    print(f"  A⁻:  {result['E_gas_A_au']:.10f}")
-    print(f"  HRef:  {result['E_gas_HRef_au']:.10f}")
-    print(f"  Ref⁻:  {result['E_gas_Ref_au']:.10f}")
-    print()
-    print("Thermal Corrections (G_corr = qh-G - E_gas, au):")
-    print(f"  HA:  {result['G_corr_HA_au']:.10f}")
-    print(f"  A⁻:  {result['G_corr_A_au']:.10f}")
-    print(f"  HRef:  {result['G_corr_HRef_au']:.10f}")
-    print(f"  Ref⁻:  {result['G_corr_Ref_au']:.10f}")
-    print()
-    print("Solvent Single-Point Energies (E_solv, au):")
-    print(f"  HA:  {result['E_solv_HA_au']:.10f}")
-    print(f"  A⁻:  {result['E_solv_A_au']:.10f}")
-    print(f"  HRef:  {result['E_solv_HRef_au']:.10f}")
-    print(f"  Ref⁻:  {result['E_solv_Ref_au']:.10f}")
-    print()
-    print("Solution Free Energies (G_soln = E_solv + G_corr, au):")
-    print(f"  HA:  {result['G_soln_HA_au']:.10f}")
-    print(f"  A⁻:  {result['G_soln_A_au']:.10f}")
-    print(f"  HRef:  {result['G_soln_HRef_au']:.10f}")
-    print(f"  Ref⁻:  {result['G_soln_Ref_au']:.10f}")
-    print("-" * 78)
-    print()
-    print("pKa Calculation:")
-    print(f"  ΔG_soln = {result['delta_G_soln_au']:.10f} au")
-    print(f"         = {result['delta_G_soln_kcal_mol']:.4f} kcal/mol")
-    print(f"  pKa(HRef)_ref = {pka_reference:.2f}")
-    print()
-    print(f"  *** Computed pKa(HA) = {result['pKa']:.2f} ***")
-    print("=" * 78)
-
-
-def click_pka_thermochemistry_options(f):
-    """Thermochemistry options reused by pKa submission and analysis."""
+def _click_thermochemistry_options(f):
+    """T/P/c and quasi-RRHO cutoffs accepted by ``Thermochemistry``."""
     f = thermochemistry_temp_pressure_conc_options(
         f,
         temperature_required=False,
         temperature_default=298.15,
         concentration_default=1.0,
         pressure_default=1.0,
-        concentration_short="-c",
     )
-    return thermochemistry_cutoff_options(
-        f,
-        enthalpy_default=100.0,
-    )
+    return thermochemistry_cutoff_options(f)
 
 
 def click_pka_shared_options(f):
-    f = click_pka_thermochemistry_options(f)
+    f = _click_thermochemistry_options(f)
 
     @click.option(
         "-s",
@@ -619,6 +159,59 @@ def click_pka_shared_options(f):
     return wrapper
 
 
+def _thermochemistry_kwargs_from_shared(shared):
+    keys = (
+        "temperature",
+        "concentration",
+        "pressure",
+        "cutoff_entropy_grimme",
+        "cutoff_enthalpy",
+        "entropy_method",
+    )
+    return {key: shared[key] for key in keys if shared.get(key) is not None}
+
+
+def store_pka_shared(ctx, kwargs):
+    """Record pKa CLI options on ``ctx.obj`` for submit and analyze."""
+    s_freq_cutoff, entropy_method = resolve_entropy_cutoff(
+        kwargs.get("cutoff_entropy_grimme"),
+        kwargs.get("cutoff_entropy_truhlar"),
+    )
+    ctx.ensure_object(dict)
+    ctx.obj["pka_shared"] = dict(
+        scheme=kwargs["scheme"],
+        reference=kwargs["reference"],
+        reference_proton_index=kwargs["reference_proton_index"],
+        reference_color_code=kwargs["reference_color_code"],
+        reference_charge=kwargs["reference_charge"],
+        reference_multiplicity=kwargs["reference_multiplicity"],
+        reference_conjugate_base_charge=kwargs[
+            "reference_conjugate_base_charge"
+        ],
+        reference_conjugate_base_multiplicity=kwargs[
+            "reference_conjugate_base_multiplicity"
+        ],
+        delta_g_proton=kwargs["delta_g_proton"],
+        conjugate_base_charge=kwargs["conjugate_base_charge"],
+        conjugate_base_multiplicity=kwargs["conjugate_base_multiplicity"],
+        solvent_model=kwargs["solvent_model"],
+        solvent_id=kwargs["solvent_id"],
+        skip_completed=kwargs["skip_completed"],
+        **_thermochemistry_kwargs_from_shared(
+            {
+                "temperature": kwargs.get("temperature"),
+                "concentration": kwargs.get("concentration"),
+                "pressure": kwargs.get("pressure"),
+                "cutoff_entropy_grimme": s_freq_cutoff,
+                "cutoff_enthalpy": kwargs.get("cutoff_enthalpy"),
+                "entropy_method": entropy_method,
+            }
+        ),
+    )
+    ctx.obj["pka_proton_index"] = kwargs.get("proton_index")
+    ctx.obj["pka_color_code"] = kwargs.get("color_code")
+
+
 def is_pka_cdxml_input(filename):
     """Return True when *filename* is a ChemDraw CDX/CDXML structure file."""
     return bool(filename) and str(filename).lower().endswith(
@@ -709,23 +302,6 @@ def require_pka_charge_multiplicity(opt_settings, source_hint=""):
         "Provide them on the parent command or use a ChemDraw structure "
         f"from which they can be inferred{suffix}."
     )
-
-
-def is_pka_batch_invocation(ctx):
-    """Return True when the nested ``pka`` command targets ``batch`` mode."""
-    if getattr(ctx, "invoked_subcommand", None) != "pka":
-        return False
-
-    tokens = []
-    current = ctx
-    while current is not None:
-        if getattr(current, "invoked_subcommand", None) == "pka":
-            tokens.extend(str(token) for token in (current.args or []))
-        current = current.parent
-
-    if "submit" in tokens:
-        return False
-    return "batch" in tokens
 
 
 def resolve_pka_batch_row(filepath, proton_index=None, color_code=None):
@@ -1189,7 +765,7 @@ def _auto_discover_pka_files(ha_gas_path, href_gas_path, program=None):
 
 
 @click.group(name="pka", cls=MyGroup)
-@click_pka_thermochemistry_options
+@_click_thermochemistry_options
 @click_pka_analysis_scheme_options
 @click.pass_context
 def pka(
@@ -1204,20 +780,24 @@ def pka(
     delta_g_proton,
 ):
     """Backend-independent pKa output analysis."""
-    s_freq_cutoff, entropy_method = resolve_pka_entropy_cutoff(
+    s_freq_cutoff, entropy_method = resolve_entropy_cutoff(
         cutoff_entropy_grimme, cutoff_entropy_truhlar
     )
 
     ctx.ensure_object(dict)
     ctx.obj["pka_shared"] = dict(
-        temperature=temperature,
-        concentration=concentration,
-        pressure=pressure,
-        cutoff_entropy_grimme=s_freq_cutoff,
-        cutoff_enthalpy=cutoff_enthalpy,
-        entropy_method=entropy_method,
         scheme=scheme,
         delta_g_proton=delta_g_proton,
+        **_thermochemistry_kwargs_from_shared(
+            {
+                "temperature": temperature,
+                "concentration": concentration,
+                "pressure": pressure,
+                "cutoff_entropy_grimme": s_freq_cutoff,
+                "cutoff_enthalpy": cutoff_enthalpy,
+                "entropy_method": entropy_method,
+            }
+        ),
     )
 
 
@@ -1301,12 +881,7 @@ def analyze(
             a_solv_file=a_solv,
             scheme="direct",
             delta_G_proton=shared["delta_g_proton"],
-            temperature=shared["temperature"],
-            concentration=shared["concentration"],
-            pressure=shared["pressure"],
-            cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
-            cutoff_enthalpy=shared["cutoff_enthalpy"],
-            entropy_method=shared["entropy_method"],
+            **_thermochemistry_kwargs_from_shared(shared),
         )
         return None
 
@@ -1349,12 +924,7 @@ def analyze(
         ref_solv_file=ref_solv,
         pka_reference=reference_pka,
         scheme=scheme,
-        temperature=shared["temperature"],
-        concentration=shared["concentration"],
-        pressure=shared["pressure"],
-        cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
-        cutoff_enthalpy=shared["cutoff_enthalpy"],
-        entropy_method=shared["entropy_method"],
+        **_thermochemistry_kwargs_from_shared(shared),
     )
 
     # Return None so process_pipeline skips jobrunner execution.
@@ -1425,24 +995,19 @@ def batch_analyze(ctx, output_table, output_results, program, **kwargs):
     logger.info(
         f"Computing pKa ({_scheme_display_name(scheme)}) "
         f"for {len(pka_output_table)} systems "
-        f"(T={shared['temperature']}K, program={program_label})"
+        f"(T={shared.get('temperature')}K, program={program_label})"
     )
     results = pka_output_table.run_pka(
         output_cls=compute_pka,
-        temperature=shared["temperature"],
-        concentration=shared["concentration"],
-        pressure=shared["pressure"],
-        cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
-        cutoff_enthalpy=shared["cutoff_enthalpy"],
-        entropy_method=shared["entropy_method"],
         scheme=scheme,
         delta_G_proton=shared.get("delta_g_proton"),
+        **_thermochemistry_kwargs_from_shared(shared),
     )
     output_string = pka_output_table.echo_pka_output_table_results(
         results=results,
         output_results=output_results,
-        temperature=shared["temperature"],
-        pressure=shared["pressure"],
+        temperature=shared.get("temperature"),
+        pressure=shared.get("pressure"),
         scheme=scheme,
     )
     click.echo(output_string)

@@ -1842,3 +1842,97 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
             f"Entropy: {self._entropy:.6f} {energy_units}/K\n"
             f"Gibbs Free Energy: {self._gibbs_free_energy:.6f} {energy_units}"
         )
+
+
+def _thermochemistry_kwargs(
+    temperature,
+    concentration,
+    pressure,
+    cutoff_entropy_grimme,
+    cutoff_enthalpy,
+    entropy_method,
+    energy_units="hartree",
+    check_imaginary_frequencies=True,
+):
+    return {
+        "temperature": temperature,
+        "concentration": concentration,
+        "pressure": pressure,
+        "s_freq_cutoff": cutoff_entropy_grimme,
+        "h_freq_cutoff": cutoff_enthalpy,
+        "entropy_method": entropy_method,
+        "energy_units": energy_units,
+        "check_imaginary_frequencies": check_imaginary_frequencies,
+    }
+
+
+def _extract_thermochemistry_property(thermo, filepath, attr, label):
+    if attr == "electronic_energy":
+        value = thermo.electronic_energy
+    elif attr == "qrrho_gibbs_free_energy":
+        value = thermo.qrrho_gibbs_free_energy
+    elif attr == "zero_point_energy":
+        value = thermo.zero_point_energy
+    elif attr == "enthalpy":
+        value = thermo.enthalpy
+    elif attr == "qrrho_enthalpy":
+        value = thermo.qrrho_enthalpy
+    elif attr == "gibbs_free_energy":
+        value = thermo.gibbs_free_energy
+    else:
+        raise ValueError(f"Unknown thermochemistry property {attr!r}.")
+    if value is None:
+        raise ValueError(f"Could not extract {label} from file: {filepath}")
+    return value
+
+
+def gas_phase_data(
+    filepath,
+    temperature=298.15,
+    concentration=1.0,
+    pressure=1.0,
+    cutoff_entropy_grimme=100.0,
+    cutoff_enthalpy=100.0,
+    entropy_method="grimme",
+):
+    """Return gas-phase SCF energy and qh-G correction in Hartree."""
+    thermo = Thermochemistry(
+        filename=filepath,
+        **_thermochemistry_kwargs(
+            temperature,
+            concentration,
+            pressure,
+            cutoff_entropy_grimme,
+            cutoff_enthalpy,
+            entropy_method,
+        ),
+    )
+    electronic_energy_j_mol = _extract_thermochemistry_property(
+        thermo,
+        filepath,
+        "electronic_energy",
+        "SCF energy",
+    )
+    qh_gibbs_j_mol = _extract_thermochemistry_property(
+        thermo,
+        filepath,
+        "qrrho_gibbs_free_energy",
+        "quasi-harmonic Gibbs free energy",
+    )
+    electronic_energy_au = energy_conversion(
+        "j/mol", "hartree", electronic_energy_j_mol
+    )
+    qh_gibbs_au = energy_conversion("j/mol", "hartree", qh_gibbs_j_mol)
+    return electronic_energy_au, qh_gibbs_au - electronic_energy_au
+
+
+def solvent_scf_energy(filepath):
+    """Return solvent-phase SCF energy in Hartree."""
+    thermo = Thermochemistry(filename=filepath)
+    electronic_energy_j_mol = _extract_thermochemistry_property(
+        thermo,
+        filepath,
+        "electronic_energy",
+        "SCF energy",
+    )
+    return energy_conversion("j/mol", "hartree", electronic_energy_j_mol)

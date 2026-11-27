@@ -107,12 +107,39 @@ class ClusterHelper:
                 running_job_ids.append(job_id)
         return running_job_ids
 
+    @staticmethod
+    def _parent_slurm_job_id(job_id_text):
+        """
+        Parent SLURM job id, or None when the sacct row is a step.
+
+        Step rows (``12345.batch``, ``12345.extern``, ``12345.0``) are
+        not jobs. The leading integer of an allocation id (``12345``
+        or array task ``12345_1``) is compared with the ``squeue`` id.
+
+        Args:
+            job_id_text (str): JobID field from one ``sacct`` row.
+
+        Returns:
+            int | None: Parent job id, or None for a step row.
+        """
+        if "." in job_id_text:
+            return None
+        leading_digits = []
+        for char in job_id_text:
+            if not char.isdigit():
+                break
+            leading_digits.append(char)
+        if not leading_digits:
+            return None
+        return int("".join(leading_digits))
+
     def _get_running_job_names_on_slurm(self):
         """
         Collect job names running on SLURM.
 
-        Invokes `sacct` and filters by username, then cross-references IDs
-        from `squeue`. Job names are returned as reported by the scheduler.
+        Invokes `sacct` and filters by username, then keeps names whose
+        parent job id is in the `squeue` id list. Step rows are ignored
+        so a ``.batch`` or ``.extern`` id cannot drop the parent name.
 
         Returns:
             list[str]: Job names for currently running jobs.
@@ -126,7 +153,7 @@ class ClusterHelper:
             line = raw_line.strip()
             if self.username in line:
                 line_elem = line.split()
-                job_id = int(line_elem[1])
+                job_id = self._parent_slurm_job_id(line_elem[1])
                 # Checks for currently running jobs
                 if job_id in running_job_ids:
                     running_job_names.append(line_elem[-1])

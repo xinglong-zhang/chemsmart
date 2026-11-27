@@ -570,16 +570,8 @@ def gaussian(
 
     # obtain Gaussian Settings from filename, if supplied;
     #  otherwise return defaults
-
-    # Defer filetype validation if the pka subcommand is being invoked,
-    # as it has its own table file handling.
-    from chemsmart.cli.pka import is_pka_batch_invocation, is_pka_cdxml_input
-    from chemsmart.utils.datasets import PKaTableEntry
-
-    is_pka_subcommand = ctx.invoked_subcommand == "pka"
-    is_pka_table_input = is_pka_subcommand and (
-        PKaTableEntry.is_submission_table(filename)
-        or (is_pka_cdxml_input(filename) and is_pka_batch_invocation(ctx))
+    skip_structure_load = bool(filename) and str(filename).lower().endswith(
+        (".csv", ".tsv", ".txt")
     )
 
     if filename is None:
@@ -593,24 +585,27 @@ def gaussian(
     elif filename.endswith((".com", ".gjf", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here
         #  and do not use any defaults!
-        if filename.endswith(".out") and (
-            get_program_type_from_file(filename) == "xtb"
-        ):
-            # xTB output is only a geometry source; its route/method do not
-            # map onto Gaussian settings. Start from defaults (like .xyz) but
-            # inherit charge/multiplicity from the xTB calculation so the new
+        output_program = (
+            get_program_type_from_file(filename)
+            if filename.endswith(".out")
+            else None
+        )
+        if output_program in ("xtb", "orca"):
+            # xTB/ORCA output is only a geometry source; its route/method do
+            # not map onto Gaussian settings. Start from defaults (like .xyz)
+            # but inherit charge/multiplicity from the calculation so the new
             # Gaussian job is fully specified. CLI -c/-m still override below.
             logger.info(
-                f"Detected xTB output {filename}; using default Gaussian "
-                f"settings with geometry and charge/multiplicity from the "
-                f"xTB calculation."
+                f"Detected {output_program} output {filename}; using default "
+                f"Gaussian settings with geometry and charge/multiplicity "
+                f"from the {output_program} calculation."
             )
             job_settings = GaussianJobSettings.default()
-            xtb_molecule = Molecule.from_filepath(filename)
-            if xtb_molecule.charge is not None:
-                job_settings.charge = xtb_molecule.charge
-            if xtb_molecule.multiplicity is not None:
-                job_settings.multiplicity = xtb_molecule.multiplicity
+            source_molecule = Molecule.from_filepath(filename)
+            if source_molecule.charge is not None:
+                job_settings.charge = source_molecule.charge
+            if source_molecule.multiplicity is not None:
+                job_settings.multiplicity = source_molecule.multiplicity
         else:
             job_settings = GaussianJobSettings.from_filepath(filename)
     elif filename.endswith(".db"):
@@ -629,12 +624,6 @@ def gaussian(
             job_settings = GaussianJobSettings.default()
     # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi",
     #  ".cif", ".traj", ".gro")):
-    elif is_pka_table_input:
-        job_settings = GaussianJobSettings.default()
-        logger.info(
-            "pka subcommand invoked with table or CDXML file; "
-            "skipping filetype validation and using default Gaussian settings"
-        )
     else:
         logger.debug(
             f"Falling back to default Gaussian job settings for file {filename}."
@@ -704,10 +693,12 @@ def gaussian(
     # obtain molecule structure
     molecules = None
 
-    # Skip molecule loading for pKa table files (handled by pKa batch)
-    if is_pka_table_input:
+    # Skip molecule loading for table files (parsed by the subcommand).
+    if skip_structure_load:
         logger.debug(
-            f"Skipping molecule loading for pKa table file: {filename}"
+            "Skipping molecule loading for %s table file: %s",
+            ctx.invoked_subcommand,
+            filename,
         )
         molecules = None
     else:
@@ -722,7 +713,7 @@ def gaussian(
                 "Please specify only one of them."
             )
 
-    if filename and not is_pka_table_input:
+    if filename and not skip_structure_load:
         if is_chemsmart_db:
             if structure_id is not None:
                 molecules = Molecule.from_filepath(
@@ -756,7 +747,7 @@ def gaussian(
                 f"Obtained {len(molecules)} molecule {molecules} from {filename}"
             )
 
-    if pubchem and not is_pka_table_input:
+    if pubchem and not skip_structure_load:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
         assert (
             molecules is not None

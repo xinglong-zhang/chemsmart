@@ -114,13 +114,15 @@ class GaussianIRCJob(GaussianJob):
             # parent label, so the sub-job reuses it unchanged.
 
         ircf_settings.jobtype = "ircf"
-        return GaussianGeneralJob(
+        job = GaussianGeneralJob(
             molecule=self.molecule,
             settings=ircf_settings,
             label=label,
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
+        job.folder = self.folder
+        return job
 
     def _ircr_job(self):
         """
@@ -153,13 +155,15 @@ class GaussianIRCJob(GaussianJob):
             # parent label, so the sub-job reuses it unchanged.
 
         ircr_settings.jobtype = "ircr"
-        return GaussianGeneralJob(
+        job = GaussianGeneralJob(
             molecule=self.molecule,
             settings=ircr_settings,
             label=label,
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
+        job.folder = self.folder
+        return job
 
     def _run_forward(self):
         """
@@ -209,6 +213,21 @@ class GaussianIRCJob(GaussianJob):
             self._run_forward()
             self._run_reverse()
 
+    def endpoint_jobs(self):
+        """Directional IRC jobs whose logs hold the endpoints.
+
+        Both directions are included when ``settings.direction`` is unset.
+        ``forward`` and ``reverse`` return that direction only.
+
+        Returns:
+            list: Forward and/or reverse Gaussian jobs.
+        """
+        if self.settings.direction == "forward":
+            return [self._ircf_job()]
+        if self.settings.direction == "reverse":
+            return [self._ircr_job()]
+        return [self._ircf_job(), self._ircr_job()]
+
     def _job_is_complete(self):
         """
         Check if the complete IRC calculation is finished.
@@ -222,33 +241,7 @@ class GaussianIRCJob(GaussianJob):
             bool: True if the required IRC
             calculations are complete, False otherwise.
         """
-        if self.settings.direction == "forward":
-            return self._run_forward_is_complete()
-        elif self.settings.direction == "reverse":
-            return self._run_reverse_is_complete()
-        else:
-            return (
-                self._run_forward_is_complete()
-                and self._run_reverse_is_complete()
-            )
-
-    def _run_forward_is_complete(self):
-        """
-        Check if the forward IRC calculation is complete.
-
-        Returns:
-            bool: True if forward IRC is complete, False otherwise.
-        """
-        return self._ircf_job().is_complete()
-
-    def _run_reverse_is_complete(self):
-        """
-        Check if the reverse IRC calculation is complete.
-
-        Returns:
-            bool: True if reverse IRC is complete, False otherwise.
-        """
-        return self._ircr_job().is_complete()
+        return all(job.is_complete() for job in self.endpoint_jobs())
 
     def backup_files(self, backup_chk=False):
         """

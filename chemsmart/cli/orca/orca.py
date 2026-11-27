@@ -506,16 +506,8 @@ def orca(
 
     # obtain ORCA Settings from filename, if supplied; otherwise return
     # defaults
-
-    # Defer filetype validation if the pka subcommand is being invoked,
-    # as it has its own table file handling.
-    from chemsmart.cli.pka import is_pka_batch_invocation, is_pka_cdxml_input
-    from chemsmart.utils.datasets import PKaTableEntry
-
-    is_pka_subcommand = ctx.invoked_subcommand == "pka"
-    is_pka_table_input = is_pka_subcommand and (
-        PKaTableEntry.is_submission_table(filename)
-        or (is_pka_cdxml_input(filename) and is_pka_batch_invocation(ctx))
+    skip_structure_load = bool(filename) and str(filename).lower().endswith(
+        (".csv", ".tsv", ".txt")
     )
 
     if filename is None:
@@ -550,9 +542,11 @@ def orca(
         else:
             job_settings = ORCAJobSettings.from_filepath(filename)
             logger.info(f"Loaded ORCA settings from file: {filename}")
-    elif filename.endswith(".xyz"):
+    elif filename.endswith((".xyz", ".cdx", ".cdxml")):
         job_settings = ORCAJobSettings.default()
-        logger.info(f"Using default ORCA settings for XYZ file: {filename}")
+        logger.info(
+            f"Using default ORCA settings for structure file: {filename}"
+        )
     elif filename.endswith(".db"):
         if is_chemsmart_db:
             job_settings = ORCAJobSettings.from_database(
@@ -568,13 +562,11 @@ def orca(
                 f"File {filename} is not a valid chemsmart database file."
             )
             job_settings = ORCAJobSettings.default()
-    elif is_pka_table_input or (
-        is_pka_subcommand and is_pka_cdxml_input(filename)
-    ):
+    elif skip_structure_load:
         job_settings = ORCAJobSettings.default()
         logger.info(
-            "pka subcommand invoked with table or CDXML file; "
-            "skipping filetype validation and using default ORCA settings"
+            "Using default ORCA settings for table file: %s",
+            filename,
         )
     else:
         raise ValueError(
@@ -677,10 +669,12 @@ def orca(
     # obtain molecule structure from file or PubChem
     molecules = None
 
-    # Skip molecule loading for pKa table/CDXML files (handled by pKa batch)
-    if is_pka_table_input:
+    # Skip molecule loading for table files (parsed by the subcommand).
+    if skip_structure_load:
         logger.debug(
-            f"Skipping molecule loading for pKa table/CDXML file: {filename}"
+            "Skipping molecule loading for %s table file: %s",
+            ctx.invoked_subcommand,
+            filename,
         )
         molecules = None
     else:
@@ -695,7 +689,7 @@ def orca(
                 "Please specify only one of them."
             )
 
-    if filename and not is_pka_table_input:
+    if filename and not skip_structure_load:
         if is_chemsmart_db:
             if structure_id is not None:
                 molecules = Molecule.from_filepath(
@@ -726,7 +720,7 @@ def orca(
             ), f"Could not obtain molecule from {filename}!"
             logger.debug(f"Obtained molecules {molecules} from {filename}")
 
-    if pubchem and not is_pka_table_input:
+    if pubchem and not skip_structure_load:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
         assert (
             molecules is not None

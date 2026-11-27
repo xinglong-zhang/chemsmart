@@ -6,7 +6,7 @@ settings management including configuration
 file handling, directory structure management,
 and access to user-specific settings
 for computational chemistry software
-(Gaussian, ORCA, xTB, CREST) and server configurations.
+(Gaussian, ORCA, xTB, CREST, chain) and server configurations.
 Manages the ~/.chemsmart user configuration directory and associated files.
 
 Classes:
@@ -26,8 +26,11 @@ Configuration Structure:
     │   └── orca_project_settings.yaml
     ├── xtb/
     │   └── xtb_project_settings.yaml
-    └── crest/
-        └── crest_project_settings.yaml
+    ├── crest/
+    │   └── crest_project_settings.yaml
+    └── chain/
+        ├── chain1.yaml
+        └── test.yaml
 """
 
 import glob
@@ -193,6 +196,16 @@ class CHEMSMARTUserSettings:
         """
         return os.path.join(self.config_dir, "crest")
 
+    @property
+    def user_chain_settings_dir(self):
+        """
+        Get the user chain settings directory.
+
+        Returns:
+            str: Path to the directory containing chain project settings.
+        """
+        return os.path.join(self.config_dir, "chain")
+
     @cached_property
     def server_yaml_files(self):
         """
@@ -244,6 +257,16 @@ class CHEMSMARTUserSettings:
             list: List of paths to CREST project configuration files.
         """
         return glob.glob(os.path.join(self.user_crest_settings_dir, "*.yaml"))
+
+    @cached_property
+    def chain_project_yaml_files(self):
+        """
+        Get list of chain project YAML configuration files.
+
+        Returns:
+            list: List of paths to chain project configuration files.
+        """
+        return glob.glob(os.path.join(self.user_chain_settings_dir, "*.yaml"))
 
     @cached_property
     def scratch(self):
@@ -346,4 +369,18 @@ class CHEMSMARTUserSettings:
         return [
             os.path.basename(c).removesuffix(".yaml")
             for c in self.crest_project_yaml_files
+        ]
+
+    @cached_property
+    def all_available_chain_projects(self):
+        """
+        Get list of all available chain project configurations.
+
+        Returns:
+            list: List of chain project names (without .yaml extension)
+                  available in the user chain settings directory.
+        """
+        return [
+            os.path.basename(c).removesuffix(".yaml")
+            for c in self.chain_project_yaml_files
         ]

@@ -191,6 +191,7 @@ pymol_color_range_pattern = r"range\s*=\s*[\d\.]+"
 version_pattern = r'(version\s*=\s*")[^"]+(")'
 release_pattern = r'(release\s*=\s*")[^"]+(")'
 safe_label_pattern = r"^[a-zA-Z0-9_\-\.]+$"
+file_index_ordinal_pattern = r"_idx\d+"
 
 
 # Route string sub-token splitter: splits on whitespace, '/', '=', '(', ')', ','

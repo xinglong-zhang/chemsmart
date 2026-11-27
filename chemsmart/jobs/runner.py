@@ -243,6 +243,9 @@ class JobRunner(RegistryMixin):
             self._set_scratch()
 
         self.fake = fake
+        # Set by a chain job so child scratch directories stay apart when
+        # step labels would otherwise match.
+        self.chain_execution_name = None
 
         if num_cores is not None:
             self.num_cores = num_cores
@@ -560,7 +563,6 @@ class JobRunner(RegistryMixin):
             and self.scratch_dir
             and os.path.exists(self.running_directory)
         ):
-
             # Check if running_directory is actually within scratch_dir
             # to avoid accidentally deleting non-scratch directories
             # use resolve() to handle .. and symlinks

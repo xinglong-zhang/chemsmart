@@ -2832,6 +2832,56 @@ class TestPKaTableParsing:
             tmp_path / "collidine_pka_Ref_sp.log"
         )
 
+    def test_discover_redox_target_companion_outputs(self, tmp_path):
+        """analyze auto-discovery should find target companions from Ox gas."""
+        from chemsmart.utils.datasets import (
+            discover_redox_target_companion_outputs,
+        )
+
+        for name in (
+            "mol_redox_ox_opt.log",
+            "mol_redox_red_opt.log",
+            "mol_redox_ox_sp.log",
+            "mol_redox_red_sp.log",
+        ):
+            (tmp_path / name).write_text("Gaussian, Inc.\n")
+
+        ox_gas = tmp_path / "mol_redox_ox_opt.log"
+        discovered = discover_redox_target_companion_outputs(str(ox_gas))
+
+        assert discovered["red_gas"] == str(tmp_path / "mol_redox_red_opt.log")
+        assert discovered["ox_solv"] == str(tmp_path / "mol_redox_ox_sp.log")
+        assert discovered["red_solv"] == str(tmp_path / "mol_redox_red_sp.log")
+
+    def test_discover_redox_reference_companion_outputs(self, tmp_path):
+        """analyze should discover Ref_red companions from Ref_ox gas output."""
+        from chemsmart.utils.datasets import (
+            discover_redox_reference_companion_outputs,
+        )
+
+        for name in (
+            "mol_redox_RefOx_opt.log",
+            "mol_redox_RefRed_opt.log",
+            "mol_redox_RefOx_sp.log",
+            "mol_redox_RefRed_sp.log",
+        ):
+            (tmp_path / name).write_text("Gaussian, Inc.\n")
+
+        ref_ox_gas = tmp_path / "mol_redox_RefOx_opt.log"
+        discovered = discover_redox_reference_companion_outputs(
+            str(ref_ox_gas)
+        )
+
+        assert discovered["ref_red_gas"] == str(
+            tmp_path / "mol_redox_RefRed_opt.log"
+        )
+        assert discovered["ref_ox_solv"] == str(
+            tmp_path / "mol_redox_RefOx_sp.log"
+        )
+        assert discovered["ref_red_solv"] == str(
+            tmp_path / "mol_redox_RefRed_sp.log"
+        )
+
     def test_discover_pka_reference_companion_outputs_explicit_program(
         self, write_tmp_file
     ):

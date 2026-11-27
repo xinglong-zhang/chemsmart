@@ -7,6 +7,7 @@ including geometry optimizations, transition state searches, IRC calculations,
 single point calculations, and constrained optimizations.
 """
 
+from .fukui import fukui
 from .inp import inp
 from .irc import irc
 from .modred import modred
@@ -17,12 +18,14 @@ from .orca import orca
 # from .qmmm import qmmm
 from .pka import pka
 from .qrc import qrc
+from .redox import redox
 from .scan import scan
 from .singlepoint import sp
 from .tddft import td
 from .ts import ts
 
 __all__ = [
+    "fukui",
     "inp",
     "irc",
     "modred",
@@ -30,6 +33,7 @@ __all__ = [
     "orca",
     "pka",
     "qrc",
+    "redox",
     "scan",
     "sp",
     "td",

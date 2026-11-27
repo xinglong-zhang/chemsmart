@@ -1,6 +1,7 @@
 import re
 
 from chemsmart.utils.repattern import (
+    file_index_ordinal_pattern,
     gaussian_dias_filename_point_with_fragment1,
     gaussian_dias_filename_point_with_fragment2,
     gaussian_dias_filename_point_without_fragment_without_reactant,
@@ -309,3 +310,13 @@ class TestGaussianDiasRegexPatterns:
         assert (
             pattern.match("test_p123.log") is None
         ), "Should not match: test_p123.log"
+
+
+def test_file_index_ordinal_pattern():
+    pattern = re.compile(file_index_ordinal_pattern)
+    label = "mol_00_gaussian_sp_idx2_smd_toluene"
+    assert pattern.sub("", label) == "mol_00_gaussian_sp_smd_toluene"
+    kept = "mol_00_gaussian_opt_c1"
+    assert pattern.sub("", kept) == kept
+    grouped = "mol_01_gaussian_opt_g1"
+    assert pattern.sub("", grouped) == grouped
