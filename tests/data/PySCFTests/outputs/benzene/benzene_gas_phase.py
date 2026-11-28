@@ -187,12 +187,12 @@ CONFIG_JSON = """{
     "opt_solver": "geometric",
     "opt_maxsteps": 100,
     "forces": true,
-    "point_group_tol": 0.001,
+    "point_group_tol": 0.01,
     "engine": "cpu",
-    "num_threads": 12,
-    "max_memory_mb": 40960.0,
+    "num_threads": 6,
+    "max_memory_mb": 4096.0,
     "project_yaml_digest": "9f9b39bd15171d78088cf19214603d20689636ba57935f6cf9b3febc0dc936d9",
-    "settings_digest": "fbc933d1dd0dcb813cc452b42f77d59c5d980915cceb032cfb3991b1e53052a6"
+    "settings_digest": "f2f4524d8d00e74c34780bf9d768d9e1b66d9b4b1e969181f0ce0f6f3b9d2040"
 }"""
 
 
@@ -447,8 +447,10 @@ def _detect_point_group(mol, tolerance):
 
     PySCF's default (1e-5 Bohr) is far tighter than an optimiser's convergence
     criteria: water optimised from a distorted start keeps O-H bonds differing
-    by 1e-4 Angstrom and reads as Cs rather than C2v. The rotational symmetry
-    number comes from this label, so that error would shift G by RT ln(sigma).
+    by 1e-4 Angstrom and reads as Cs rather than C2v, and an optimised benzene
+    with C-C bonds within 2e-5 Angstrom still needs about 5e-3 to read as D6h.
+    The rotational symmetry number comes from this label, so that error would
+    shift G by RT ln(sigma).
     """
     from pyscf import symm
 

@@ -7,6 +7,14 @@ DO NOT EDIT: this file is regenerated on every run, so edits are lost.
 Rerun it directly with `python <this file>` to reproduce the calculation.
 
 Imports pyscf, numpy, h5py and the standard library only -- never chemsmart.
+That keeps CHEMSMART's numpy pin and dependency tree out of the compute
+process, so a job can run in its own environment.
+
+CHEMSMART also imports this module for the results-file contract
+(``write_pyscf_h5`` and the constants below), so the fake runner and the
+reader share one definition with the generated script. Importing it runs no
+chemistry: pyscf is imported only inside the functions that need it, and the
+configuration is parsed only when run as a script.
 """
 
 import json
@@ -20,9 +28,56 @@ import traceback
 import h5py
 import numpy as np
 
-CONFIG = json.loads("""{
+#: Bumped when the layout of ``label.h5`` changes in a non-additive way.
+RESULTS_SCHEMA_VERSION = "2.0"
+
+#: Marker for an explicit null. HDF5 has no native null scalar, so a marked
+#: empty uint8 dataset distinguishes "known to be unavailable" from a missing
+#: field.
+H5_NULL_ATTRIBUTE = "chemsmart_is_null"
+
+#: Resolved settings copied from the configuration into ``spec/``.
+APPLIED_SPEC_FIELDS = (
+    "label",
+    "program",
+    "jobtype",
+    "engine",
+    "stages",
+    "symbols",
+    "positions",
+    "unit",
+    "xc",
+    "ab_initio",
+    "method",
+    "basis",
+    "charge",
+    "spin",
+    "multiplicity",
+    "dispersion",
+    "density_fit",
+    "aux_basis",
+    "defgrid",
+    "atom_grid",
+    "scf_tol",
+    "scf_maxiter",
+    "solvent_model",
+    "solvent_call",
+    "solvent_method",
+    "solvent_id",
+    "solvent_eps",
+    "opt_solver",
+    "opt_maxsteps",
+    "forces",
+    "point_group_tol",
+    "num_threads",
+    "max_memory_mb",
+    "settings_digest",
+)
+
+#: Replaced with the job's JSON configuration when the script is generated.
+CONFIG_JSON = """{
     "schema_version": "2.0",
-    "chemsmart_version": "3.3.4",
+    "chemsmart_version": "3.4.10",
     "label": "he_sp_gas_phase",
     "program": "pyscf",
     "jobtype": "sp",
@@ -64,12 +119,14 @@ CONFIG = json.loads("""{
     "solvent_eps": null,
     "opt_solver": null,
     "opt_maxsteps": null,
+    "forces": false,
+    "point_group_tol": 0.01,
     "engine": "cpu",
     "num_threads": 12,
-    "max_memory_mb": 40960.0,
-    "project_yaml_digest": "5071f92355a10fcd3526c3fc533fe830ba84c6a54779b304cb7dbd938253e8a6",
-    "settings_digest": "5bc9f8e6481dba2bcb32df3510906059617c85e118916bdbc573ec822b5b8cee"
-}""")
+    "max_memory_mb": 8192.0,
+    "project_yaml_digest": "9f9b39bd15171d78088cf19214603d20689636ba57935f6cf9b3febc0dc936d9",
+    "settings_digest": "662c874f39315ff432e1f546da7ea32464305fdd2b37b51936dcbb8f6d3ca407"
+}"""
 
 
 def _apply_threads(config):
@@ -202,7 +259,14 @@ def _run_opt(config, mf):
 def _provenance(config, started_at, ended_at, wall_seconds):
     from importlib import metadata
 
-    import pyscf
+    # Must not raise: this runs while recording a failure, and a missing or
+    # broken pyscf is itself one of the failures worth recording.
+    try:
+        import pyscf
+
+        pyscf_version = pyscf.__version__
+    except Exception:  # noqa: BLE001 - version is informational only
+        pyscf_version = None
 
     try:
         gpu_version = metadata.version("gpu4pyscf")
@@ -213,11 +277,11 @@ def _provenance(config, started_at, ended_at, wall_seconds):
         from pyscf.dft import libxc
 
         libxc_version = getattr(libxc, "__version__", None)
-    except Exception:
+    except Exception:  # noqa: BLE001 - version is informational only
         libxc_version = None
 
     return {
-        "pyscf_version": pyscf.__version__,
+        "pyscf_version": pyscf_version,
         "gpu4pyscf_version": gpu_version,
         "libxc_version": libxc_version,
         "chemsmart_version": config.get("chemsmart_version"),
@@ -243,7 +307,31 @@ def _provenance(config, started_at, ended_at, wall_seconds):
     }
 
 
-_H5_NULL_ATTRIBUTE = "chemsmart_is_null"
+def write_pyscf_h5(
+    filename,
+    *,
+    spec,
+    provenance,
+    status,
+    results,
+    schema_version=RESULTS_SCHEMA_VERSION,
+):
+    """Write a versioned, machine-operable PySCF results artifact.
+
+    Written to a temporary sibling and renamed, so a process killed mid-write
+    cannot leave a truncated file that reads as a result. Numeric arrays keep
+    their dtype and shape; mappings become nested groups. Unsupported Python
+    objects raise rather than being silently converted to strings.
+    """
+    filename = os.fspath(filename)
+    temporary = filename + ".tmp"
+    with h5py.File(temporary, "w") as handle:
+        handle.attrs["schema_version"] = schema_version
+        _write_mapping(handle.create_group("spec"), spec)
+        _write_mapping(handle.create_group("provenance"), provenance)
+        _write_mapping(handle.create_group("status"), status)
+        _write_mapping(handle.create_group("results"), results)
+    os.replace(temporary, filename)
 
 
 def _write_mapping(group, mapping):
@@ -262,7 +350,7 @@ def _write_value(group, key, value):
         dataset = group.create_dataset(
             key, data=np.empty((0,), dtype=np.uint8)
         )
-        dataset.attrs[_H5_NULL_ATTRIBUTE] = True
+        dataset.attrs[H5_NULL_ATTRIBUTE] = True
         return
 
     string_dtype = h5py.string_dtype(encoding="utf-8")
@@ -287,41 +375,77 @@ def _write_value(group, key, value):
     group.create_dataset(key, data=value)
 
 
-def _write_h5(path, spec, provenance, status, results):
-    """Write the versioned machine contract."""
-    with h5py.File(path, "w") as handle:
-        handle.attrs["schema_version"] = CONFIG["schema_version"]
-        _write_mapping(handle.create_group("spec"), spec)
-        _write_mapping(handle.create_group("provenance"), provenance)
-        _write_mapping(handle.create_group("status"), status)
-        _write_mapping(handle.create_group("results"), results)
+def _detect_point_group(mol, tolerance):
+    """Return the point group at a tolerance suited to optimised geometries.
+
+    PySCF's default (1e-5 Bohr) is far tighter than an optimiser's convergence
+    criteria: water optimised from a distorted start keeps O-H bonds differing
+    by 1e-4 Angstrom and reads as Cs rather than C2v, and an optimised benzene
+    with C-C bonds within 2e-5 Angstrom still needs about 5e-3 to read as D6h.
+    The rotational symmetry number comes from this label, so that error would
+    shift G by RT ln(sigma).
+    """
+    from pyscf import symm
+
+    default = symm.geom.TOLERANCE
+    symm.geom.TOLERANCE = tolerance
+    try:
+        return symm.detect_symm(mol._atom)[0]
+    finally:
+        symm.geom.TOLERANCE = default
 
 
-def main():
-    label = CONFIG["label"]
+def _record_optional(results, status, name, compute):
+    """Store an optional property, recording why it is absent if it fails.
+
+    Some method/solvent combinations do not implement every property. That
+    must not fail a converged calculation, but it must not vanish silently.
+    """
+    try:
+        results[name] = compute()
+    except Exception as exc:  # noqa: BLE001 - recorded, not fatal
+        reason = "%s: %s" % (type(exc).__name__, exc)
+        status["skipped_properties"][name] = reason
+        sys.stderr.write("Skipped %s: %s\n" % (name, reason))
+
+
+def _stages_succeeded(status):
+    """Return whether every stage recorded so far succeeded."""
+    return all(
+        entry.get("converged", entry.get("completed", False))
+        for entry in status["stages"].values()
+    )
+
+
+def main(config):
+    label = config["label"]
     log_path = label + ".out"
     results_path = label + ".h5"
 
     started_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     t0 = time.time()
 
-    spec_fields = ('label', 'program', 'jobtype', 'engine', 'stages', 'symbols', 'positions', 'unit', 'xc', 'ab_initio', 'method', 'basis', 'charge', 'spin', 'multiplicity', 'dispersion', 'density_fit', 'aux_basis', 'defgrid', 'atom_grid', 'scf_tol', 'scf_maxiter', 'solvent_model', 'solvent_call', 'solvent_method', 'solvent_id', 'solvent_eps', 'opt_solver', 'opt_maxsteps', 'num_threads', 'max_memory_mb', 'settings_digest')
-    spec = {key: CONFIG.get(key) for key in spec_fields}
-    status = {"stages": {}, "normal_termination": False, "failure": None}
+    spec = {key: config.get(key) for key in APPLIED_SPEC_FIELDS}
+    status = {
+        "stages": {},
+        "normal_termination": False,
+        "failure": None,
+        "skipped_properties": {},
+    }
     results = {}
     current_stage = "initialization"
 
     try:
-        _apply_threads(CONFIG)
-        mol = _build_mole(CONFIG, log_path)
-        mf = _build_method(CONFIG, mol)
+        _apply_threads(config)
+        mol = _build_mole(config, log_path)
+        mf = _build_method(config, mol)
         # ``_build_method`` resolves environment-owned values such as the PCM
         # dielectric.  Echo the value actually applied, not the controller's
         # unresolved placeholder.
-        spec["solvent_eps"] = CONFIG.get("solvent_eps")
+        spec["solvent_eps"] = config.get("solvent_eps")
 
         energies = []
-        for stage in CONFIG["stages"]:
+        for stage in config["stages"]:
             current_stage = stage
             if stage == "scf":
                 energy = mf.kernel()
@@ -334,7 +458,7 @@ def main():
                     stage_status["cycles"] = int(cycles)
                 status["stages"]["scf"] = stage_status
             elif stage == "opt":
-                optimizer_converged, mol_eq = _run_opt(CONFIG, mf)
+                optimizer_converged, mol_eq = _run_opt(config, mf)
                 # Re-converge on the optimised geometry so that every
                 # reported property belongs to the same structure.
                 mf.reset(mol_eq)
@@ -354,6 +478,14 @@ def main():
                     stage_status["final_scf_iterations"] = int(cycles)
                 status["stages"]["opt"] = stage_status
             elif stage == "hess":
+                # Frequencies are only meaningful at a converged stationary
+                # point, and a Hessian is too costly to compute regardless.
+                if not _stages_succeeded(status):
+                    status["stages"]["hess"] = {
+                        "completed": False,
+                        "skipped_because": "an earlier stage failed",
+                    }
+                    continue
                 hessian = mf.Hessian().kernel()
                 from pyscf.hessian import thermo
 
@@ -376,7 +508,9 @@ def main():
                 results["force_constants"] = np.asarray(
                     analysis["force_const_dyne"], dtype=float
                 )
-                status["stages"]["hess"] = {"converged": True}
+                # PySCF exposes no CPHF convergence flag, so this records that
+                # the stage ran to the end, not that it converged.
+                status["stages"]["hess"] = {"completed": True}
             else:
                 raise ValueError("Unknown stage: %s" % stage)
 
@@ -388,53 +522,58 @@ def main():
         results["positions"] = np.asarray(
             mol.atom_coords(unit="Angstrom"), dtype=float
         )
-        results["atomic_numbers"] = np.asarray(
-            mol.atom_charges(), dtype=int
-        )
+        results["atomic_numbers"] = np.asarray(mol.atom_charges(), dtype=int)
         results["mo_energy"] = _host(mf.mo_energy).astype(float)
         results["mo_occ"] = _host(mf.mo_occ).astype(float)
 
         # PySCF gradients are dE/dR in Hartree/Bohr. Molecule and database
-        # contracts expose forces, so negate the exact final-geometry gradient.
-        # Some method/solvent combinations do not implement gradients; in that
-        # case the field is absent rather than populated with a placeholder.
-        try:
-            results["forces"] = -_host(
-                mf.nuc_grad_method().kernel()
-            ).astype(float)
-        except Exception:
-            pass
-        try:
-            results["mulliken_charges"] = _host(
-                mf.mulliken_pop(verbose=0)[1]
-            ).astype(float)
-        except Exception:
-            pass
-        try:
-            results["dipole_moment"] = _host(
-                mf.dip_moment(unit="Debye", verbose=0)
-            ).astype(float)
-        except Exception:
-            pass
-        try:
-            from pyscf import symm
-
-            results["point_group"] = symm.detect_symm(mol._atom)[0]
-        except Exception:
-            results["point_group"] = None
+        # contracts expose forces, so negate. Requested explicitly because a
+        # gradient costs a large fraction of the SCF itself, and only when the
+        # SCF converged: forces from an unconverged density are meaningless.
+        if config["forces"]:
+            if mf.converged:
+                _record_optional(
+                    results,
+                    status,
+                    "forces",
+                    lambda: -_host(mf.nuc_grad_method().kernel()).astype(
+                        float
+                    ),
+                )
+            else:
+                status["skipped_properties"][
+                    "forces"
+                ] = "final SCF did not converge"
+        _record_optional(
+            results,
+            status,
+            "mulliken_charges",
+            lambda: _host(mf.mulliken_pop(verbose=0)[1]).astype(float),
+        )
+        _record_optional(
+            results,
+            status,
+            "dipole_moment",
+            lambda: _host(mf.dip_moment(unit="Debye", verbose=0)).astype(
+                float
+            ),
+        )
+        results["point_group"] = None
+        _record_optional(
+            results,
+            status,
+            "point_group",
+            lambda: _detect_point_group(mol, config["point_group_tol"]),
+        )
 
         spec["num_basis_functions"] = int(mol.nao)
         spec["num_shells"] = int(mol.nbas)
         spec["num_electrons"] = int(mol.nelectron)
         spec["nelec"] = [int(n) for n in mol.nelec]
 
-        status["normal_termination"] = (
-            len(status["stages"]) == len(CONFIG["stages"])
-            and all(
-                entry.get("converged", False)
-                for entry in status["stages"].values()
-            )
-        )
+        status["normal_termination"] = len(status["stages"]) == len(
+            config["stages"]
+        ) and _stages_succeeded(status)
     except Exception as exc:  # noqa: BLE001 - recorded, then re-raised
         status["failure"] = {
             "type": type(exc).__name__,
@@ -445,11 +584,16 @@ def main():
 
     wall_seconds = time.time() - t0
     ended_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
-    provenance = _provenance(
-        CONFIG, started_at, ended_at, wall_seconds
-    )
+    provenance = _provenance(config, started_at, ended_at, wall_seconds)
 
-    _write_h5(results_path, spec, provenance, status, results)
+    write_pyscf_h5(
+        results_path,
+        spec=spec,
+        provenance=provenance,
+        status=status,
+        results=results,
+        schema_version=config["schema_version"],
+    )
 
     if status["failure"] is not None:
         sys.stderr.write(status["failure"]["traceback"])
@@ -458,14 +602,14 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(json.loads(CONFIG_JSON)))
 #INFO: ******************** input file end ********************
 
 
-System: uname_result(system='Darwin', node='hongjiseung-ui-MacBookAir.local', release='25.5.0', version='Darwin Kernel Version 25.5.0: Mon Apr 27 20:41:26 PDT 2026; root:xnu-12377.121.6~2/RELEASE_ARM64_T8132', machine='arm64')  Threads 1
+System: uname_result(system='Darwin', node='hongjiseung-ui-MacBookAir.local', release='25.6.0', version='Darwin Kernel Version 25.6.0: Fri Jul 31 19:11:03 PDT 2026; root:xnu-12377.161.14~5/RELEASE_ARM64_T8132', machine='arm64')  Threads 1
 Python 3.10.20 | packaged by conda-forge | (main, Jun 11 2026, 03:28:47) [Clang 19.1.7 ]
 numpy 1.26.4  scipy 1.15.2  h5py 3.16.0
-Date: Wed Aug 26 12:35:45 2026
+Date: Tue Nov 10 11:47:26 2026
 PySCF version 2.14.0
 PySCF path  /opt/anaconda3/envs/chemsmart/lib/python3.10/site-packages/pyscf
 
@@ -486,7 +630,7 @@ number of NR pGTOs = 7
 number of NR cGTOs = 5
 basis = def2-svp
 ecp = {}
-CPU time:         0.92
+CPU time:         0.96
 
 
 ******** <class 'pyscf.df.df_jk.DFRKS'> ********
@@ -502,8 +646,8 @@ SCF conv_tol = 1e-09
 SCF conv_tol_grad = None
 SCF max_cycles = 50
 direct_scf = False
-chkfile to save SCF result = /var/folders/fl/w608z4l1547b_8rv3fc5mgth0000gn/T/tmp4uertrz5
-max_memory 40960 MB (current use 97 MB)
+chkfile to save SCF result = /var/folders/fl/w608z4l1547b_8rv3fc5mgth0000gn/T/tmpw10tz4rg
+max_memory 8192 MB (current use 97 MB)
 XC library pyscf.dft.libxc version 7.0.0
     S. Lehtola, C. Steigemann, M. J.T. Oliveira, and M. A.L. Marques.,  SoftwareX 7, 1–5 (2018)
 XC functionals = b3lyp
@@ -512,10 +656,10 @@ radial grids:
     Treutler-Ahlrichs [JCP 102, 346 (1995); DOI:10.1063/1.469408] (M4) radial grids
     
 becke partition: Becke, JCP 88, 2547 (1988); DOI:10.1063/1.454033
-pruning grids: <function nwchem_prune at 0x178828af0>
+pruning grids: <function nwchem_prune at 0x127540ca0>
 grids dens level: 3
 symmetrized grids: False
-atomic radii adjust function: <function treutler_atomic_radii_adjust at 0x1787df370>
+atomic radii adjust function: <function treutler_atomic_radii_adjust at 0x1274f3520>
 User specified grid scheme (75, 302)
 small_rho_cutoff = 0
 Set gradient conv threshold to 3.16228e-05
@@ -523,7 +667,7 @@ Initial guess from minao.
 tot grids = 11928
 ******** <class 'pyscf.df.df.DF'> ********
 auxbasis = def2-svp-jkfit
-max_memory = 40960.0
+max_memory = 8192.0
 init E= -2.9060719823944
   HOMO = -0.65347813298043  LUMO = 1.11516496380752  gap/eV = 48.12723
 cycle= 1 E= -2.90710244960654  delta_E= -0.00103  |g|= 0.00357  |ddm|= 0.0115
@@ -536,13 +680,3 @@ cycle= 4 E= -2.90710532296343  delta_E= -9.77e-15  |g|= 1.82e-08  |ddm|= 1.02e-0
   HOMO = -0.649879519920163  LUMO = 1.11821950229645  gap/eV = 48.11243
 Extra cycle  E= -2.90710532296342  delta_E= 9.77e-15  |g|= 4.65e-09  |ddm|= 1.89e-08
 converged SCF energy = -2.90710532296342
-
-
-******** <class 'pyscf.df.grad.rks.Gradients'> for <class 'pyscf.df.df_jk.DFRKS'> ********
-unit = Eh/Bohr
-max_memory 40960 MB (current use 110 MB)
-grid_response = False
---------------- DFRKS gradients ---------------
-         x                y                z
-0 He     0.0000000000     0.0000000000    -0.0000000000
-----------------------------------------------

@@ -518,10 +518,6 @@ class TestPySCFBenzeneOutput:
         centred = positions - positions.mean(axis=0)
         assert np.linalg.svd(centred, compute_uv=False)[2] < 1e-3
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="fixture was computed before the 1e-2 point-group tolerance",
-    )
     def test_near_exact_symmetry_gives_the_true_symmetry_number(
         self, pyscf_benzene_output
     ):
@@ -529,10 +525,6 @@ class TestPySCFBenzeneOutput:
         assert pyscf_benzene_output.point_group == "D6h"
         assert pyscf_benzene_output.rotational_symmetry_number == 12
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="fixture was computed before the 1e-2 point-group tolerance",
-    )
     def test_free_energy_uses_the_true_symmetry_number(
         self, pyscf_benzene_output
     ):

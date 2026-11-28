@@ -14,7 +14,7 @@ import pytest
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.pyscf import driver
-from chemsmart.io.pyscf.output import PySCFOutput, read_pyscf_h5
+from chemsmart.io.pyscf.output import PySCFH5File, PySCFOutput
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
 from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
 from chemsmart.jobs.pyscf.writer import (
@@ -46,18 +46,16 @@ def test_v2_groups_round_trip_typed_status_nulls_and_exact_arrays(tmp_path):
         assert null.shape == (0,)
         assert bool(null.attrs[H5_NULL_ATTRIBUTE]) is True
 
-    observed_spec, observed_provenance, observed_status, observed_results = (
-        read_pyscf_h5(path)
-    )
-    assert observed_spec == spec
-    assert observed_provenance == provenance
-    assert observed_status == status
+    observed = PySCFH5File(path)
+    assert observed.spec == spec
+    assert observed.provenance == provenance
+    assert observed.status == status
     for key, expected in results.items():
         if isinstance(expected, str):
-            assert observed_results[key] == expected
+            assert observed.results[key] == expected
         else:
-            np.testing.assert_array_equal(observed_results[key], expected)
-            assert observed_results[key].dtype == expected.dtype
+            np.testing.assert_array_equal(observed.results[key], expected)
+            assert observed.results[key].dtype == expected.dtype
 
     output = PySCFOutput(tmp_path / "label.out")
     assert output.normal_termination is True
@@ -83,13 +81,15 @@ def test_generated_standalone_encoder_writes_same_v2_contract(tmp_path):
         path, spec=spec, provenance=provenance, status=status, results=results
     )
 
-    observed = read_pyscf_h5(path)
-    assert observed[:3] == (spec, provenance, status)
+    observed = PySCFH5File(path)
+    assert observed.spec == spec
+    assert observed.provenance == provenance
+    assert observed.status == status
     for key, expected in results.items():
         if isinstance(expected, str):
-            assert observed[3][key] == expected
+            assert observed.results[key] == expected
         else:
-            np.testing.assert_array_equal(observed[3][key], expected)
+            np.testing.assert_array_equal(observed.results[key], expected)
 
 
 def test_generated_driver_preserves_imaginary_modes_as_negative_values():
@@ -159,7 +159,7 @@ def test_v2_round_trip_does_not_mask_injected_spec_mismatch(
         results=results,
     )
 
-    observed_spec, _, _, _ = read_pyscf_h5(path)
+    observed_spec = PySCFH5File(path).spec
     assert observed_spec[field] == injected
     assert observed_spec[field] != expected
 
@@ -174,7 +174,7 @@ def test_schema_version_layout_mismatch_is_rejected(tmp_path):
         handle.create_group("results")
 
     with pytest.raises(ValueError, match=r"2\.0 requires /spec to be a group"):
-        read_pyscf_h5(path)
+        PySCFH5File(path).spec
 
 
 def test_settings_digest_ignores_provenance_only_fields_but_not_engine():
@@ -245,7 +245,7 @@ class TestResultsEncoding:
             status={},
             results={},
         )
-        return read_pyscf_h5(path)[0]["value"]
+        return PySCFH5File(path).spec["value"]
 
     def test_string_lists_round_trip(self, tmp_path):
         assert self._round_trip(tmp_path, ["O", "H", "H"]) == ["O", "H", "H"]

@@ -7,6 +7,11 @@ This page covers running PySCF jobs on the GPU4PySCF engine and configuring the 
 GPU4PySCF is an execution engine of the PySCF program, not a separate program. The same ``sp``, ``opt``, and ``hess``
 subcommands and the same project YAML apply; only the engine changes.
 
+.. note::
+
+   The GPU engine can be configured, previewed, and run, but CHEMSMART has not validated GPU4PySCF results against CPU
+   reference calculations. Compare a representative case with a ``--no-gpu`` run before relying on GPU numbers.
+
 **********************
  Selecting the Engine
 **********************
